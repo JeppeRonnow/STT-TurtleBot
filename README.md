@@ -1,7 +1,7 @@
 # STT-TurtleBot
 Kodebase til TurtleBot og PC for 3. semesterprojekt.
 ## Set up env
-:)
+
 ```bash
 python -m venv myenv
 ```
