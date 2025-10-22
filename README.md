@@ -3,7 +3,7 @@ Kodebase til TurtleBot og PC for 3. semesterprojekt.
 ## Set up env
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 ```
 
 ```bash
@@ -33,9 +33,12 @@ For SSH over WiFi. Start Hotspot on your phone with:
 * Password: turtlebot
 
 Then boot the TurtleBot and connect your PC to the Hotspot.
-Run `ifconfig` to see the IP of the TurtleBot and run
+Run `sudo arp-scan -l` to see the IP of the TurtleBot and run
 ```bash
 ssh pi@<TurtleBot IP>
 ```
 
-
+Before running ssh to turtlebot and run:
+```bash
+ros2 launch mqtt_2_cmd_pkg mqtt_interface.launch.py
+```
