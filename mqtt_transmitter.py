@@ -63,9 +63,9 @@ class mqtt_transmitter:
 # Test code if class is run as main
 if __name__ == '__main__':
     # Get mqtt host information
-    server = input("Enter Server ip: ")
+    server = "10.132.133.254"
     port = 1883
-    topic = input("Enter server topic: ")
+    topic = "mqtt_vel"
 
     # Init mqtt client
     mqtt = mqtt_transmitter(server, port, topic)
@@ -78,7 +78,7 @@ if __name__ == '__main__':
             linear_input = input("Enter linear_x velocity: ")
             if linear_input.lower() == 'q':
                 break
-            angular_input = input("Enter angular_z veloci
+            angular_input = input("Enter angular_z velocity: ")
             if angular_input.lower() == 'q':
                 break
 
