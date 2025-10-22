@@ -3,11 +3,11 @@ Kodebase til TurtleBot og PC for 3. semesterprojekt.
 ## Set up env
 
 ```bash
-python -m venv myenv
+python -m venv venv
 ```
 
 ```bash
-source myenv/bin/activate
+source venv/bin/activate
 ```
 
 ## install libs
