@@ -2,17 +2,15 @@ import paho.mqtt.client as mqtt
 import json
 from time import sleep
 
-class mqtt_transmitter:
+class MQTT_Transmitter:
     # Define MQTT connection details
     MQTT_SERVER = ""   # Replace with MQTT server address
-    MQTT_PORT = 1      # Replace with MQTT port
-    MQTT_TOPIC = ""    # Replace with MQTT topic
+    MQTT_PORT = 1883      # Replace with MQTT port
+    MQTT_TOPIC = "mqtt_vel"    # Replace with MQTT topic
 
     # Class init and mqtt init
-    def __init__(self, SERVER, PORT, TOPIC) -> None:
-        self.MQTT_SERVER = SERVER
-        self.MQTT_PORT = PORT
-        self.MQTT_TOPIC = TOPIC
+    def __init__(self, server) -> None:
+        self.MQTT_SERVER = server
 
         # Init MQTT client
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
