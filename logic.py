@@ -111,9 +111,9 @@ class Logic:
 
         if payload[0] == "turn":
             if payload[1] == "right":
-                return (0.0, -0.10)
+                return (0.0, -1.0)
 
-            return (0.0, 0.1)
+            return (0.0, 1.0)
 
         if payload[0] == "move":
             if payload[1] == "forward":
