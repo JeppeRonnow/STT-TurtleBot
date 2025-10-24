@@ -49,7 +49,7 @@ class STT:
     def transcribe(self, model, audio):
         try:
             audio = audio.astype(np.float32, copy=False)
-            result = model.transcribe(audio, fp16=False, language='en', verbose=False, no_speech_threshold=0.5)
+            result = model.transcribe(audio, fp16=False, language='en', verbose=None, no_speech_threshold=0.5)
             segments = result.get("segments", [])
             for segment in segments:
                 text = segment.get("text", "").strip()
@@ -67,7 +67,6 @@ class STT:
 
     def add_transcription(self, word: str):
         w = self._clean_word(word)
-        print(f"Appedning: {w}")
         self.transcription.append(w)
         if len(self.transcription) > self.max_tokens:
             del self.transcription[:-self.max_tokens]
@@ -104,3 +103,7 @@ class STT:
 
     def get_audio_buffer(self):
         return self.audio_buffer
+
+    
+    def clear_transcribe(self):
+        self.transcription = []

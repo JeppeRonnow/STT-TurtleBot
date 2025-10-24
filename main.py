@@ -11,6 +11,8 @@ from stt import STT
 from dsp import DSP
 from mqtt_transmitter import MQTT_Transmitter
 
+DEBUG = False
+
 def main():
     # Init objects
     filter = DSP(SAMPLE_RATE, HIGHPASS_HZ, LOWPASS_HZ)  # Bandpass filter
@@ -45,18 +47,6 @@ def main():
                                    # Apply filters
                 filtered = filter.apply_filters(raw)
                 
-                if np.any(filtered):
-                   print("Signal in raw")
-                   print("Raw min: ", np.min(filtered))
-                   print("Raw max: ", np.max(filtered))
-                   print("Raw mean: ", np.mean(filtered))
-                   print("Raw first 10 samples: ", raw[:10])
-
-
-                print("No singnal in raw")
-
-
-
                 # Normalize lightly to (-1,1)
                 filtered = filter.normalize(filtered)
 
@@ -76,15 +66,21 @@ def main():
                     print("[Payload]:", payload)
                     
                     velocities = logic.payload_to_velocities(payload)
-                    print(f"linear.x: {velocities[0]}, angular.z: {velocities[1]}")
                     turtle.publish_command(velocities[0], velocities[1])
                     
+                    s_t_t.clear_transcribe()
+
                 if consumed:
                     s_t_t.strip_transcription(consumed)
 
+    except KeyboardInterrupt:
+        print("\nCtrl+C pressed. Sending stop command (linear.x=0, angular.z=0) and disconnecting.")
+
+        # Send stop command with zero velocities
+        turtle.publish_command(0.0, 0.0)
+
     finally:
-        pass
-        #mqtt.disconnect()
+        turtle.close_connectio()
 
 if __name__ == "__main__":
     try:
