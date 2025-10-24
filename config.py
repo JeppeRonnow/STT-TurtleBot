@@ -1,15 +1,16 @@
 # MQTT Config
-SERVER = "10.133.134.254"
+SERVER = "10.67.156.254"
 
 # Whisper config
 SAMPLE_RATE = 16000           # Whisper expects 16 kHz
 HIGHPASS_HZ = 120.0           # High-pass filter cutoff
 LOWPASS_HZ = 5000.0           # Low-pass filter cutoff
 CHUNK_SECONDS = 2             # how often we trigger a partial transcription
-BUFFER_SECONDS = 8            # rolling context length
+BUFFER_SECONDS = 4            # rolling context length
 
-MODEL_NAME = "turbo"       # change to "base" for lighter, "medium"/"large" for better accuracy (slower)
-MODEL_DEVICE = "cpu"                 # set input device index or leave None for default
+MODEL_NAME = "tiny"       # change to "base" for lighter, "medium"/"large" for better accuracy (slower)
+MODEL_DEVICE = "cpu"      # set input device index or leave None for default
+AUDIO_DEVICE = None
 
 ERROR_WORDS = {"Thank you.", 
                "Thanks for watching!"}  # Words to filter out from transcription

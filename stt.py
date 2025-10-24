@@ -9,19 +9,19 @@ import queue
 class STT:
     model_name = ""
     model_device = ""
-    max_buffer_size = ""
+    max_buffer_samples = 0
     buffer_lock = threading.Lock()
     audio_buffer = deque()
     tick_q = queue.Queue()
     error_words = ""
-    max_tokens = ""
+    max_tokens = 0
     transcription = []
     
     # Object init
     def __init__(self, MODEL_NAME, MODEL_DEVICE, BUFFER_SECONDS, SAMPLERATE, ERROR_WORDS, MAX_TOKENS) -> None:
         self.model_name = MODEL_NAME
         self.model_device = MODEL_DEVICE
-        self.max_buffer_size = BUFFER_SECONDS * SAMPLERATE
+        self.max_buffer_samples = BUFFER_SECONDS * SAMPLERATE
         self.error_words = ERROR_WORDS
         self.max_tokens = MAX_TOKENS
         pass
@@ -30,7 +30,7 @@ class STT:
     # Load whisper model
     def load_model(self):
         print("Loading Whisper model ...")
-        model = whisper.load_model(self.model_name, self.model_device)
+        model = whisper.load_model(self.model_name, device=self.model_device)
         print("Model loaded. Starting stream. Press Ctrl+C to stop.")
         return model
 
@@ -49,14 +49,15 @@ class STT:
     def transcribe(self, model, audio):
         try:
             audio = audio.astype(np.float32, copy=False)
-            result = model.transcribe(audio, fp16=False, language='en', verbose=False, no_speech_threshold=0.5)
+            result = model.transcribe(audio, fp16=False, language='en', verbose=None, no_speech_threshold=0.5)
             segments = result.get("segments", [])
             for segment in segments:
                 text = segment.get("text", "").strip()
+                print(f"Raw text: {text}")
                 if text and text not in self.error_words:
                     print(text)
                     for word in text.split():
-                        add_transcription(word)
+                        self.add_transcription(word)
             # Clear buffer after transcription to avoid repeats
             with self.buffer_lock:
                 self.audio_buffer.clear()
@@ -65,7 +66,7 @@ class STT:
 
 
     def add_transcription(self, word: str):
-        w = _clean_word(word)
+        w = self._clean_word(word)
         self.transcription.append(w)
         if len(self.transcription) > self.max_tokens:
             del self.transcription[:-self.max_tokens]
@@ -90,3 +91,19 @@ class STT:
         w = word.lower().strip()
         w = w.strip(".,!?;:()[]{}\"“”‘’'`…")
         return w
+
+
+    def get_tick_q(self, timeout):
+        return self.tick_q.get(timeout)
+
+
+    def get_buffer_lock(self):
+        return self.buffer_lock
+
+
+    def get_audio_buffer(self):
+        return self.audio_buffer
+
+    
+    def clear_transcribe(self):
+        self.transcription = []

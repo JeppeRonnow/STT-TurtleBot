@@ -30,31 +30,31 @@ class Logic:
 
         n = len(words)
         for i, word in enumerate(words):
-            # Stop
+        # Stop
             if word in self.stop_syn:
                 operation = "stop"
                 return operation, i + 1
-
             # Return
             if word in self.return_syn:
                 operation = "return"
                 return operation, i + 1
-
             # Turn left/right
             if word in self.turn_syn:
                 operation = "turn"
                 direction = None
                 distance = None
                 last_word_index = 0
-                for i, word in enumerate(words):
-                    if word in self.dir_syn:
-                        direction = word
-                        if i + 1 > last_word_index:
-                            last_word_index = i + 1
-                    if self.is_number(word):
-                        distance = self.format_number(word)
-                        if i + 1 > last_word_index: 
-                            last_word_index = i + 1
+                # Use the remaining words starting from current position
+                for j in range(i, n):
+                    current_word = words[j]
+                    if current_word in self.dir_syn:
+                        direction = current_word
+                        if j + 1 > last_word_index:
+                            last_word_index = j + 1
+                    if self.is_number(current_word):
+                        distance = self.format_number(current_word)
+                        if j + 1 > last_word_index: 
+                            last_word_index = j + 1
                     if direction and distance:
                         break
                 if last_word_index >= n and not distance and self.current_pause < PAUSE_ITTERATIONS:
@@ -63,7 +63,7 @@ class Logic:
                     distance = DEFAULT_TURN_DEG
                 if direction and distance:
                     consumed = last_word_index + 1
-                    payload = self.format_payload(operation ,direction, distance)
+                    payload = self.format_payload(operation, direction, distance)
                     return payload, consumed
 
             # Move
@@ -99,6 +99,30 @@ class Logic:
         return None, 0
 
 
+    # Convert payload to velocities
+    def payload_to_velocities(self, payload):
+        payload = payload.split(" ")
+
+        if payload == "stop":
+            return (0.0, 0.0)
+
+        if payload[0] == "return":
+            return (0.0, 0.0)
+
+        if payload[0] == "turn":
+            if payload[1] == "right":
+                return (0.0, -1.0)
+
+            return (0.0, 1.0)
+
+        if payload[0] == "move":
+            if payload[1] == "forward":
+                return (0.20, 0.0)
+            
+            return (-0.20, 0.0)
+        
+        return (0.0, 0.0)
+
     def is_number(self, number: str) -> bool:
         try:
             float(number)
@@ -121,23 +145,11 @@ class Logic:
         return int(round(float(number)))
 
 
-    @overload
-    def format_payload(self, operation: str) -> str: ...
-    @overload
-    def format_payload(self, operation: str, direction: str) -> str: ...
-    @overload
-    def format_payload(self, operation: str, distance: int) -> str: ...
-    @overload
-    def format_payload(self, operation: str, direction: str, distance: int) -> str: ...
-    
     def format_payload(self, operation: str, *args: Union[str, int]) -> str:
-        # 0 args -> "op"
         if not args:
             return operation
-        # 1 arg -> "op X" (direction or distance)
-        if len(args) == 1 and isinstance(args[0], (str, int)):
+        if len(args) == 1:
             return f"{operation} {args[0]}"
-        # 2 args -> "op direction distance"
         if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], int):
             return f"{operation} {args[0]} {args[1]}"
         raise TypeError("Invalid format_payload arguments")
