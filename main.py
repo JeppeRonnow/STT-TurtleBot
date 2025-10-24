@@ -2,6 +2,7 @@ import sounddevice as sd
 import numpy as np
 import queue
 import time
+import threading
 
 from config import *
 from record import Record
@@ -19,16 +20,16 @@ def main():
     turtle = MQTT_Transmitter(SERVER)   # MQTT_Transmitter
 
     # Load Whisper STT model
-    model = stt.load_model()
+    model = s_t_t.load_model()
 
     next_transcribe_time = 0.0
     blocksize = int(CHUNK_SECONDS * SAMPLE_RATE)
 
     try:
-        with sd.InputStream(channels=1, samplerate=SAMPLE_RATE, blocksize=blocksize, dtype='float32', callback=stt.audio_callback, device=DEVICE):
+        with sd.InputStream(channels=1, samplerate=SAMPLE_RATE, blocksize=blocksize, dtype='float32', callback=s_t_t.audio_callback, device=AUDIO_DEVICE):
             while True:
                 try:    # Wait for next chunk signal
-                    tick_q.get(timeout=1.0)
+                    s_t_t.get_tick_q(timeout=1.0)
                 except queue.Empty:
                     continue
 
@@ -37,13 +38,24 @@ def main():
                     continue
                 next_transcribe_time = now + CHUNK_SECONDS * 0.9  # slight overlap
 
-                with buffer_lock:
-                    if not audio_buffer:
+                with s_t_t.get_buffer_lock():
+                    if not s_t_t.get_audio_buffer():
                         continue
-                    raw = np.array(audio_buffer, dtype=np.float32)
-
-                # Apply filters
+                    raw = np.array(s_t_t.get_audio_buffer(), dtype=np.float32)
+                                   # Apply filters
                 filtered = filter.apply_filters(raw)
+                
+                if np.any(filtered):
+                   print("Signal in raw")
+                   print("Raw min: ", np.min(filtered))
+                   print("Raw max: ", np.max(filtered))
+                   print("Raw mean: ", np.mean(filtered))
+                   print("Raw first 10 samples: ", raw[:10])
+
+
+                print("No singnal in raw")
+
+
 
                 # Normalize lightly to (-1,1)
                 filtered = filter.normalize(filtered)
@@ -62,11 +74,14 @@ def main():
                 payload, consumed = logic.handle_transcription(words)
                 if payload:
                     print("[Payload]:", payload)
-
-                    turtle.publish_command()
-                    #mqtt.send_packet("robot/command", payload)
+                    
+                    velocities = logic.payload_to_velocities(payload)
+                    print(f"linear.x: {velocities[0]}, angular.z: {velocities[1]}")
+                    turtle.publish_command(velocities[0], velocities[1])
+                    
                 if consumed:
                     s_t_t.strip_transcription(consumed)
+
     finally:
         pass
         #mqtt.disconnect()

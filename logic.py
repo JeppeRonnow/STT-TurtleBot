@@ -99,6 +99,30 @@ class Logic:
         return None, 0
 
 
+    # Convert payload to velocities
+    def payload_to_velocities(self, payload):
+        payload = payload.split(" ")
+
+        if payload == "stop":
+            return (0.0, 0.0)
+
+        if payload[0] == "return":
+            return (0.0, 0.0)
+
+        if payload[0] == "turn":
+            if payload[1] == "right":
+                return (0.0, -0.10)
+
+            return (0.0, 0.1)
+
+        if payload[0] == "move":
+            if payload[1] == "forward":
+                return (0.20, 0.0)
+            
+            return (-0.20, 0.0)
+        
+        return (0.0, 0.0)
+
     def is_number(self, number: str) -> bool:
         try:
             float(number)
