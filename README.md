@@ -38,7 +38,7 @@ Run `sudo arp-scan -l` to see the IP of the TurtleBot and run
 ssh pi@<TurtleBot IP>
 ```
 
-Before running ssh to turtlebot and run:
+Before running ssh to turtlebot and run (Should Auto run on start up now):
 ```bash
 ros2 launch mqtt_2_cmd_pkg mqtt_interface.launch.py
 ```
