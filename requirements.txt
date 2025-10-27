@@ -15,6 +15,7 @@ numpy==2.3.3
 openai-whisper==20250625
 paho-mqtt==2.1.0
 pycparser==2.23
+PyYAML==6.0.3
 regex==2025.9.18
 requests==2.32.5
 scipy==1.16.2
