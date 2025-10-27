@@ -19,7 +19,7 @@ def main():
     logic = Logic(config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE_CM, config.DEBUG)                                # Logic control
     audio = Record(config.SAMPLE_RATE, config.DEBUG)                                                                                          # Audio recorder
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
-    #turtle = MQTT_Transmitter(config.SERVER, config.DEBUG)                                                                                    # MQTT_Transmitter
+    turtle = MQTT_Transmitter(config.SERVER, config.DEBUG)                                                                                    # MQTT_Transmitter
 
     # Load Whisper STT model
     model = whisper.load_model()

@@ -75,7 +75,7 @@ class Logic:
             return (0.0, 0.0)
 
         if payload[0] == "return":
-            return (0.0, 0.0)
+            return (69.69, 69.69)
 
         if payload[0] == "turn":
             if payload[1] == "right":
