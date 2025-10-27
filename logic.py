@@ -42,60 +42,26 @@ class Logic:
                 return operation, i + 1
             # Turn left/right
             if word in self.turn_syn:
-                operation = "turn"
-                direction = None
-                distance = None
-                last_word_index = 0
+                direction = ""
+
                 # Use the remaining words starting from current position
                 for j in range(i, n):
-                    current_word = words[j]
-                    if current_word in self.dir_syn:
-                        direction = current_word
-                        if j + 1 > last_word_index:
-                            last_word_index = j + 1
-                    if self.is_number(current_word):
-                        distance = self.format_number(current_word)
-                        if j + 1 > last_word_index: 
-                            last_word_index = j + 1
-                    if direction and distance:
-                        break
-                if last_word_index >= n and not distance and self.current_pause < self.PAUSE_ITTERATIONS:
-                    continue
-                if not distance:
-                    distance = self.DEFAULT_TURN_DEG
-                if direction and distance:
-                    consumed = last_word_index + 1
-                    payload = self.format_payload(operation, direction, distance)
-                    return payload, consumed
+                    if words[j] in self.dir_syn:
+                        direction = words[j]
+                   
+                payload = self.format_payload("turn", direction)
+                return payload, i + 1
 
-            # Move
-            if word in self.fwd_syn or word in self.back_syn:
-                operation = "move"
-                direction = "forward" if word in self.fwd_syn else "backward"
-                distance = None
-                unit = None
-                last_word_index = 0
-                for i, word in enumerate(words):
-                    if self.is_number(word):
-                        distance = self.format_number(word)
-                        if i + 1 > last_word_index: 
-                            last_word_index = i + 1
-                    if word in self.dist_units:
-                        unit = word
-                        if i + 1 > last_word_index: 
-                            last_word_index = i + 1
-                    if distance and unit:
-                        break
-                if last_word_index >= n and not distance and not unit and self.current_pause < self.PAUSE_ITTERATIONS:
-                    continue
-                if not distance:
-                    distance = self.DEFAULT_DISTANCE_CM
-                if unit:
-                    distance = self.format_unit(distance, unit)
-                if distance:
-                    consumed = last_word_index + 1
-                    payload = self.format_payload(operation ,direction, distance)
-                    return payload, consumed
+            # Move forwards
+            if word in self.fwd_syn:
+                payload = self.format_payload("move", "forward")
+                return payload, i + 1
+            
+            # Move backwards
+            if word in self.back_syn:
+                payload = self.format_payload("move", "forward")
+                return payload, i + 1
+
 
         self.current_pause += 1
         return None, 0
