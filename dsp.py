@@ -5,9 +5,10 @@ class DSP:
     filter = ""
 
     # Create filter on objct init
-    def __init__(self, sample_rate, highpass_hz, lowpass_hz) -> None:
+    def __init__(self, sample_rate, highpass_hz, lowpass_hz, DEBUG) -> None:
         self.filter = self.design_bandpass_filter(sample_rate, highpass_hz, lowpass_hz)
-        pass
+        self.DEBUG = DEBUG
+        if self.DEBUG: print("[DSP class initialized]")
 
 
     # Create band-pass filter

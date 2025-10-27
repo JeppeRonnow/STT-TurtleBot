@@ -14,24 +14,24 @@ class STT:
     audio_buffer = deque()
     tick_q = queue.Queue()
     error_words = ""
-    max_tokens = 0
+    max_buffer_length = 0
     transcription = []
+    DEBUG = False
     
     # Object init
-    def __init__(self, MODEL_NAME, MODEL_DEVICE, BUFFER_SECONDS, SAMPLERATE, ERROR_WORDS, MAX_TOKENS) -> None:
+    def __init__(self, MODEL_NAME, MODEL_DEVICE, BUFFER_SECONDS, SAMPLERATE, MAX_BUFFER_LENGTH, DEBUG) -> None:
         self.model_name = MODEL_NAME
         self.model_device = MODEL_DEVICE
         self.max_buffer_samples = BUFFER_SECONDS * SAMPLERATE
-        self.error_words = ERROR_WORDS
-        self.max_tokens = MAX_TOKENS
-        pass
-
+        self.max_buffer_length = MAX_BUFFER_LENGTH
+        self.DEBUG = DEBUG
+        if self.DEBUG: print(f"[STT class initialized]")
 
     # Load whisper model
     def load_model(self):
-        print("Loading Whisper model ...")
+        if self.DEBUG: print("Loading Whisper model ...")
         model = whisper.load_model(self.model_name, device=self.model_device)
-        print("Model loaded. Starting stream. Press Ctrl+C to stop.")
+        if self.DEBUG: print("Model loaded. Starting stream. Press Ctrl+C to stop.")
         return model
 
 
@@ -53,20 +53,20 @@ class STT:
             segments = result.get("segments", [])
             for segment in segments:
                 text = segment.get("text", "").strip()
-                print(f"Raw text: {text}")
-                if text and text not in self.error_words:
-                    print(text)
+                if self.DEBUG: print(f"Raw text: {text}")
+                if text:
+                    if self.DEBUG: print(text)
                     for word in text.split():
                         self.add_transcription(word)
             # Clear buffer after transcription to avoid repeats
             with self.buffer_lock:
                 self.audio_buffer.clear()
         except Exception as e:
-            print(f"[Transcribe error] {e}", flush=True)
+            if self.DEBUG: print(f"[Transcribe error] {e}", flush=True)
 
 
     def add_transcription(self, word: str):
-        w = self._clean_word(word)
+        w = self.clean_word(word)
         self.transcription.append(w)
         if len(self.transcription) > self.max_tokens:
             del self.transcription[:-self.max_tokens]
@@ -87,7 +87,7 @@ class STT:
         del self.transcription[:x]
 
 
-    def _clean_word(self, word: str) -> str:
+    def clean_word(self, word: str) -> str:
         w = word.lower().strip()
         w = w.strip(".,!?;:()[]{}\"“”‘’'`…")
         return w

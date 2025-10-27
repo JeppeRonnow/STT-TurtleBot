@@ -10,9 +10,10 @@ class Record:
     recording_done = False
     
     # Set sample rate on object creation
-    def __init__(self, SAMPLE_RATE) -> None:
+    def __init__(self, SAMPLE_RATE, DEBUG) -> None:
         self.sample_rate = SAMPLE_RATE
-        pass
+        self.DEBUG = DEBUG
+        if self.DEBUG: print(f"[Record class initialized]")
 
     
     # Record audio and save
@@ -28,5 +29,5 @@ class Record:
                 audio_to_save_filtered = np.concatenate(self.recorded_audio_filtered)
                 sf.write("Raw.wav", audio_to_save_raw, self.sample_rate)
                 sf.write("Filtered.wav", audio_to_save_filtered, self.sample_rate)
-                print("Saved first " + str(interval) + " seconds of filtered audio.")
+                if self.DEBUG: print("Saved first " + str(interval) + " seconds of filtered audio.")
                 self.recording_done = True

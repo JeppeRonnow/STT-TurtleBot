@@ -1,7 +1,5 @@
 from typing import List, Optional, Tuple, overload, Union
 
-from config import PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, PAUSE_ITTERATIONS, DEFAULT_DISTANCE_CM
-
 class Logic:
     move_syn = {"move", "go", "walk", "drive"}
     turn_syn = {"turn", "rotate"}
@@ -20,8 +18,12 @@ class Logic:
 
 
     # Object init
-    def __init__(self) -> None:
-        pass
+    def __init__(self, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE_CM, DEBUG) -> None:
+        self.PAUSE_ITTERATIONS = PAUSE_ITTERATIONS
+        self.DEFAULT_TURN_DEG = DEFAULT_TURN_DEG
+        self.DEFAULT_DISTANCE_CM = DEFAULT_DISTANCE_CM
+        self.DEBUG = DEBUG
+        if self.DEBUG: print(f"[Logic class initialized]")
 
 
     def handle_transcription(self, words: List[str]) -> Tuple[Optional[str], int]:
@@ -57,10 +59,10 @@ class Logic:
                             last_word_index = j + 1
                     if direction and distance:
                         break
-                if last_word_index >= n and not distance and self.current_pause < PAUSE_ITTERATIONS:
+                if last_word_index >= n and not distance and self.current_pause < self.PAUSE_ITTERATIONS:
                     continue
                 if not distance:
-                    distance = DEFAULT_TURN_DEG
+                    distance = self.DEFAULT_TURN_DEG
                 if direction and distance:
                     consumed = last_word_index + 1
                     payload = self.format_payload(operation, direction, distance)
@@ -84,10 +86,10 @@ class Logic:
                             last_word_index = i + 1
                     if distance and unit:
                         break
-                if last_word_index >= n and not distance and not unit and self.current_pause < PAUSE_ITTERATIONS:
+                if last_word_index >= n and not distance and not unit and self.current_pause < self.PAUSE_ITTERATIONS:
                     continue
                 if not distance:
-                    distance = DEFAULT_DISTANCE_CM
+                    distance = self.DEFAULT_DISTANCE_CM
                 if unit:
                     distance = self.format_unit(distance, unit)
                 if distance:
