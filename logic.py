@@ -1,7 +1,7 @@
 from typing import List, Optional, Tuple, overload, Union
 
 class Logic:
-    move_syn = {"move", "go", "walk", "drive"}
+    # move_syn = {"move", "go", "walk", "drive"} Not currently in use
     turn_syn = {"turn", "rotate"}
     stop_syn = {"stop", "halt", "freeze", "wait", "pause"}
     return_syn = {"return", "back"}
@@ -32,39 +32,42 @@ class Logic:
 
         n = len(words)
         for i, word in enumerate(words):
-        # Stop
+            # Stop
             if word in self.stop_syn:
                 operation = "stop"
                 return operation, i + 1
+            
             # Return
             if word in self.return_syn:
                 operation = "return"
                 return operation, i + 1
+            
             # Turn left/right
             if word in self.turn_syn:
                 operation = "turn"
                 direction = None
                 distance = None
-                last_word_index = 0
+                last_word_index = i
                 # Use the remaining words starting from current position
-                for j in range(i, n):
-                    current_word = words[j]
+                for j, current_word in enumerate(words):
+                    print(j, current_word)
                     if current_word in self.dir_syn:
                         direction = current_word
-                        if j + 1 > last_word_index:
-                            last_word_index = j + 1
+                        if j > last_word_index:
+                            last_word_index = j
                     if self.is_number(current_word):
                         distance = self.format_number(current_word)
-                        if j + 1 > last_word_index: 
-                            last_word_index = j + 1
+                        if j > last_word_index: 
+                            last_word_index = j
                     if direction and distance:
                         break
-                if last_word_index >= n and not distance and self.current_pause < self.PAUSE_ITTERATIONS:
-                    continue
+                if self.await_input(last_word_index, n, distance):
+                    return None, 0
                 if not distance:
                     distance = self.DEFAULT_TURN_DEG
                 if direction and distance:
                     consumed = last_word_index + 1
+                    self.current_pause = 0
                     payload = self.format_payload(operation, direction, distance)
                     return payload, consumed
 
@@ -74,30 +77,31 @@ class Logic:
                 direction = "forward" if word in self.fwd_syn else "backward"
                 distance = None
                 unit = None
-                last_word_index = 0
-                for i, word in enumerate(words):
-                    if self.is_number(word):
-                        distance = self.format_number(word)
-                        if i + 1 > last_word_index: 
-                            last_word_index = i + 1
-                    if word in self.dist_units:
-                        unit = word
-                        if i + 1 > last_word_index: 
-                            last_word_index = i + 1
+                last_word_index = i
+                for j, current_word in enumerate(words):
+                    print(j, current_word)
+                    if self.is_number(current_word):
+                        distance = self.format_number(current_word)
+                        if j > last_word_index: 
+                            last_word_index = j
+                    if current_word in self.dist_units:
+                        unit = current_word
+                        if j > last_word_index:
+                            last_word_index = j
                     if distance and unit:
                         break
-                if last_word_index >= n and not distance and not unit and self.current_pause < self.PAUSE_ITTERATIONS:
-                    continue
+                if self.await_input(last_word_index, n, distance, unit):
+                    return None, 0
                 if not distance:
                     distance = self.DEFAULT_DISTANCE_CM
                 if unit:
                     distance = self.format_unit(distance, unit)
                 if distance:
                     consumed = last_word_index + 1
+                    self.current_pause = 0
                     payload = self.format_payload(operation ,direction, distance)
                     return payload, consumed
 
-        self.current_pause += 1
         return None, 0
 
 
@@ -150,8 +154,58 @@ class Logic:
     def format_payload(self, operation: str, *args: Union[str, int]) -> str:
         if not args:
             return operation
-        if len(args) == 1:
-            return f"{operation} {args[0]}"
         if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], int):
-            return f"{operation} {args[0]} {args[1]}"
+            if args[0] in ["left", "backward"]:
+                return f"{operation} -{args[1]}"
+            else: 
+                return f"{operation} {args[1]}"
         raise TypeError("Invalid format_payload arguments")
+    
+
+    def await_input(self, last_word_index, n, distance, unit=True) -> bool:
+        if last_word_index >= n and self.current_pause < self.PAUSE_ITTERATIONS:
+            if self.DEBUG: print("LAST WORD")
+            if self.DEBUG: print(f"Pausing for more input... ({self.current_pause}/{self.PAUSE_ITTERATIONS})")
+            self.current_pause += 1
+            return True
+
+        elif not distance and self.current_pause < self.PAUSE_ITTERATIONS:
+            if self.DEBUG: print("NOT DISTANCE")
+            if self.DEBUG: print(f"Pausing for more input... ({self.current_pause}/{self.PAUSE_ITTERATIONS})")
+            self.current_pause += 1
+            return True
+
+        elif not unit and self.current_pause < self.PAUSE_ITTERATIONS:
+            if self.DEBUG: print("NOT UNIT")
+            if self.DEBUG: print(f"Pausing for more input... ({self.current_pause}/{self.PAUSE_ITTERATIONS})")
+            self.current_pause += 1
+            return True
+
+        return False
+    
+
+if __name__ == "__main__":
+    from config import Config
+    from logic import Logic
+    from stt import STT
+
+    # Configuration parameters
+    config = Config() # Load config variables from YAML file
+    logic = Logic(config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE_CM, config.DEBUG)                                # Logic control
+    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
+
+    # Load Whisper STT model
+    model = whisper.load_model()
+
+    string = "Hello hello, turn right 20 deg and then move backwards"
+    for word in string.split():
+        whisper.add_transcription(word)
+    for n in range(5):
+        whisper.print_transcription()
+        words = whisper.get_transcription()
+        payload, consumed = logic.handle_transcription(words)
+        if payload:
+            print("[Payload]:", payload)
+        if consumed:
+            print("Consumed:", consumed)
+            whisper.strip_transcription(consumed)
