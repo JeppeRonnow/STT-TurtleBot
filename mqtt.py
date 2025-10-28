@@ -59,13 +59,13 @@ class MQTT_Transmitter:
 
         # Publish payload to the MQTT topic
         self.client.publish(self.MQTT_TOPIC, json.dumps(payload), qos=1)
-        print(f"Published to {self.MQTT_TOPIC}: {payload}")
+        if self.DEBUG: print(f"Published to {self.MQTT_TOPIC}: {payload}")
 
 
 # Test code if class is run as main
 if __name__ == '__main__':
     # Get mqtt host information
-    server = "10.132.133.254"
+    server = "192.168.0.20"
     port = 1883
     topic = "mqtt_vel"
 
