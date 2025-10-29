@@ -50,7 +50,7 @@ class TOF_Sensor:
     def get_floor_distance(self) -> float:
         # return the distance to the floor from the sensor once on initialization
         data = self.get_data()
-        return data[15][8]  # assuming the floor distance is at the center of the last row
+        return data(15,8)  # assuming the floor distance is at the center of the last row
 
 
     def get_data(self) -> Matrix:
