@@ -44,6 +44,28 @@ class Logic:
             
             # Turn left/right
             if word in self.turn_syn:
+<<<<<<< HEAD
+                direction = ""
+
+                # Use the remaining words starting from current position
+                for j in range(i, n):
+                    if words[j] in self.dir_syn:
+                        direction = words[j]
+                   
+                payload = self.format_payload("turn", direction)
+                return payload, i + 1
+
+            # Move forwards
+            if word in self.fwd_syn:
+                payload = self.format_payload("move", "forward")
+                return payload, i + 1
+            
+            # Move backwards
+            if word in self.back_syn:
+                payload = self.format_payload("move", "forward")
+                return payload, i + 1
+
+=======
                 operation = "turn"
                 direction = None
                 distance = None
@@ -101,6 +123,7 @@ class Logic:
                     self.current_pause = 0
                     payload = self.format_payload(operation ,direction, distance)
                     return payload, consumed
+>>>>>>> db3ed13 (Fixed logic and modified main script)
 
         return None, 0
 
@@ -113,7 +136,7 @@ class Logic:
             return (0.0, 0.0)
 
         if payload[0] == "return":
-            return (0.0, 0.0)
+            return (69.69, 69.69)
 
         if payload[0] == "turn":
             if payload[1] == "right":

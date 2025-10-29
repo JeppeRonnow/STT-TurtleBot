@@ -13,8 +13,9 @@ class MQTT_Transmitter:
         self.MQTT_SERVER = server
         self.DEBUG = DEBUG
 
-        # Init MQTT client
         if self.DEBUG: print(f"\nConnecting to MQTT broker at {self.MQTT_SERVER}:{self.MQTT_PORT}...")
+
+        # Init MQTT client
         self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_connect = self.on_connect
         self.client.connect(self.MQTT_SERVER, self.MQTT_PORT, 60)
@@ -58,21 +59,21 @@ class MQTT_Transmitter:
 
         # Publish payload to the MQTT topic
         self.client.publish(self.MQTT_TOPIC, json.dumps(payload), qos=1)
-        print(f"Published to {self.MQTT_TOPIC}: {payload}")
+        if self.DEBUG: print(f"Published to {self.MQTT_TOPIC}: {payload}")
 
 
 # Test code if class is run as main
 if __name__ == '__main__':
     # Get mqtt host information
-    server = "10.132.133.254"
+    server = "10.17.116.254"
     port = 1883
     topic = "mqtt_vel"
 
     # Init mqtt client
-    mqtt = mqtt_transmitter(server, port, topic)
+    mqtt = MQTT_Transmitter(server, DEBUG=True)
 
     try:
-        if self.DEBUG: print("Enter 'linear.x' and 'angular.z' values to send commands (or 'q' to quit):")
+        print("Enter 'linear.x' and 'angular.z' values to send commands (or 'q' to quit):")
 
         while True:
             # Get user input
