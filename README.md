@@ -38,6 +38,7 @@ Run `sudo arp-scan -l` to see the IP of the TurtleBot and run
 ssh pi@<TurtleBot IP>
 ```
 Adding new code to turtlebot
+
 On PC
 ```bash
 rsync -avz <Git Repo>/turtle_ros/ pi@<Turtle IP>:/home/pi/rb3_ws/src/mqtt_2_cmd_pkg/mqtt_2_cmd_pkg/
