@@ -44,7 +44,6 @@ class Logic:
             
             # Turn left/right
             if word in self.turn_syn:
-<<<<<<< HEAD
                 direction = ""
 
                 # Use the remaining words starting from current position
@@ -62,68 +61,8 @@ class Logic:
             
             # Move backwards
             if word in self.back_syn:
-                payload = self.format_payload("move", "forward")
+                payload = self.format_payload("move", "reverse")
                 return payload, i + 1
-
-=======
-                operation = "turn"
-                direction = None
-                distance = None
-                last_word_index = i
-                # Use the remaining words starting from current position
-                for j, current_word in enumerate(words):
-                    print(j, current_word)
-                    if current_word in self.dir_syn:
-                        direction = current_word
-                        if j > last_word_index:
-                            last_word_index = j
-                    if self.is_number(current_word):
-                        distance = self.format_number(current_word)
-                        if j > last_word_index: 
-                            last_word_index = j
-                    if direction and distance:
-                        break
-                if self.await_input(last_word_index, n, distance):
-                    return None, 0
-                if not distance:
-                    distance = self.DEFAULT_TURN_DEG
-                if direction and distance:
-                    consumed = last_word_index + 1
-                    self.current_pause = 0
-                    payload = self.format_payload(operation, direction, distance)
-                    return payload, consumed
-
-            # Move
-            if word in self.fwd_syn or word in self.back_syn:
-                operation = "move"
-                direction = "forward" if word in self.fwd_syn else "backward"
-                distance = None
-                unit = None
-                last_word_index = i
-                for j, current_word in enumerate(words):
-                    print(j, current_word)
-                    if self.is_number(current_word):
-                        distance = self.format_number(current_word)
-                        if j > last_word_index: 
-                            last_word_index = j
-                    if current_word in self.dist_units:
-                        unit = current_word
-                        if j > last_word_index:
-                            last_word_index = j
-                    if distance and unit:
-                        break
-                if self.await_input(last_word_index, n, distance, unit):
-                    return None, 0
-                if not distance:
-                    distance = self.DEFAULT_DISTANCE_CM
-                if unit:
-                    distance = self.format_unit(distance, unit)
-                if distance:
-                    consumed = last_word_index + 1
-                    self.current_pause = 0
-                    payload = self.format_payload(operation ,direction, distance)
-                    return payload, consumed
->>>>>>> db3ed13 (Fixed logic and modified main script)
 
         return None, 0
 
