@@ -39,12 +39,12 @@ ssh pi@<TurtleBot IP>
 ```
 Adding new code to turtlebot
 On PC
-´´´
+```bash
 rsync -avz <Git Repo>/turtle_ros/ pi@<Turtle IP>:/home/pi/rb3_ws/src/mqtt_2_cmd_pkg/mqtt_2_cmd_pkg/
 ```
 
 On Turtlebot run the following to build ros with the new files
-```
+```bash
 cd ~/rb3_ws
 colcon build --packages-select mqtt_2_cmd_pkg
 source install/setup.bash
