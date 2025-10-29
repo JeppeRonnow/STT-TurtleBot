@@ -20,11 +20,11 @@ class TOF_Sensor:
     THRESH_MM = 300               # 300 mm threshold
     INTER_MEASUREMENT_MS = 20     # Sensor timing budget interplay; tune as needed
     SLEEP_BETWEEN_ZONES = 0.0     # Small delay after set_user_roi (0–5 ms typically
-    STOP_THRESHOLD = 0.5  # distance in meters to trigger stop
-    LED_PIN = 18  # BCM pin 18 (physical pin 12)
+    STOP_THRESHOLD = 0.5          # distance in meters to trigger stop
+    LED_PIN = 18                  # BCM pin 18 (physical pin 12)
 
     # add custom struct: 16x16 matrix variable. The sensor data will be stored in this matrix.
-    def make_roi(top, left, bottom, right)
+    def make_roi(top, left, bottom, right):
         pass
         
 
