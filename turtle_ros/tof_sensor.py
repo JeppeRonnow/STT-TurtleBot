@@ -15,7 +15,13 @@ class TOF_Sensor:
         GPIO.setmode(GPIO.BCM)    # or GPIO.BOARD for physical numbering
         GPIO.setup(self.LED_PIN, GPIO.OUT)
 
+<<<<<<< Updated upstream
         self.blink_led()
+=======
+
+    def make_roi(top, left, bottom, right): 
+
+>>>>>>> Stashed changes
 
         self.floor_distance = self.get_floor_distance()
         thread.Thread(target = self.object_detection).start()
