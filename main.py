@@ -66,7 +66,7 @@ def main():
                     if config.DEBUG: print("[Payload]:", payload)
                     
                     velocities = logic.payload_to_velocities(payload)
-                    #turtle.publish_command(velocities[0], velocities[1])
+                    turtle.publish_command(velocities[0], velocities[1])
                 if consumed:
                     if config.DEBUG: print("Consumed:", consumed)
                     whisper.strip_transcription(consumed)
