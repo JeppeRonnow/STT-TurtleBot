@@ -1,6 +1,20 @@
+import time
+import sys
+import signal
+
+I2C_BUS = 1
+I2C_BUS = 2
+I2C_ADDR = 0x29
+GRID_SIZE = 16                # 16x16 scan (consider 8 for speed)
+THRESH_MM = 300               # 300 mm threshold
+INTER_MEASUREMENT_MS = 20     # Sensor timing budget interplay; tune as needed
+SLEEP_BETWEEN_ZONES = 0.0
+
+import VL53L1X
+
 import threading as thread
 
-class TOF_Sensor:
+class ToF_sensor:
     # Variables
     STOP_THRESHOLD = 0.5  # distance in meters to trigger stop
 
@@ -11,16 +25,21 @@ class TOF_Sensor:
 
         self.floor_distance = self.get_floor_distance()
         thread.Thread(target = self.object_detection).start()
-    
+
+    def make_roi(top, left, bottom, right)
+
     def get_floor_distance(self) -> float:
         # return the distance to the floor from the sensor once on initialization
         return 0.0
 
+
     def get_data(self) -> matrix<16,16>:
         # return the current sensor data as a 16x16 matrix
 
+
     def stop_robot(self):
         print("Object detected! Stopping the robot.")
+
 
     def object_detection(self):
         # continuously monitor the sensor data for object detection
