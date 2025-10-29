@@ -13,6 +13,13 @@ class Matrix:
     
     def __list__(self, row, col):
         return self.matrix[row][col]
+    
+    def __str__(self):
+        print("\nMatrix Data:")
+        for row in self.matrix:
+            for col in row:
+                print(f"{col:.2f}", end=" ")
+        print("\n")
 
 class TOF_Sensor:
     # Variables
