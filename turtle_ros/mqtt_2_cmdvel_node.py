@@ -5,10 +5,10 @@ import paho.mqtt.client as mqtt
 import json
 import threading
 
-from pos_tracker import Pos_tracker
+from  mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
 
 BURGER_MAX_LIN_VEL = 0.22
-BURGER_MAX_ANF_VEL = 2.84
+BURGER_MAX_ANG_VEL = 2.84
 
 
 # Constrain a velcoty within upper and lower bound
@@ -30,7 +30,7 @@ def check_linear_limit_velocity(velocity):
 
 # Constrain angular velocity
 def check_angular_limit_velocity(velocity):
-    return constrain(velocity, -BURGER_MAX_ANF_VEL, BURGER_MAX_LIN_VEL)
+    return constrain(velocity, -BURGER_MAX_ANG_VEL, BURGER_MAX_LIN_VEL)
 
 
 class MqttToCmdVelNode(Node):
@@ -59,9 +59,9 @@ class MqttToCmdVelNode(Node):
         # Subscribe to the MQTT topic
         self.mqtt_client.subscribe(mqtt_topic)
 
-        self.get_logger().info(f"Subscribed to MQTT broker succesfully.")
+        self.get_logger().info(f"Subscribed to MQTT topic: {mqtt_topic}")
 
-        self.Pos_tracker = Pos_tracker() 
+        self.Pos_tracker = Pos_tracker()
 
 
     # When connecting to MQTT broker
@@ -104,7 +104,7 @@ class MqttToCmdVelNode(Node):
 
             # Create a Twist message
             twist_msg = self.create_twist_msg(linear_vel, angular_vel)
-            
+
             # Publish to cmd_vel topic
             self.publisher.publish(twist_msg)
             self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
@@ -124,6 +124,7 @@ class MqttToCmdVelNode(Node):
         twist_msg.twist.linear.x = float(linear_vel)
         twist_msg.twist.angular.z = float(angular_vel)
         return twist_msg
+
 
 def main(args=None):
     rclpy.init(args=args)

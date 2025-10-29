@@ -37,6 +37,12 @@ Run `sudo arp-scan -l` to see the IP of the TurtleBot and run
 ```bash
 ssh pi@<TurtleBot IP>
 ```
+If new code added to turtlebot run the following to rebuild
+```
+cd ~/rb3_ws
+colcon build --packages-select mqtt_2_cmd_pkg
+source install/setup.bash
+```
 
 Before running ssh to turtlebot and run (Should Auto run on start up now):
 ```bash

@@ -1,4 +1,4 @@
-from geometry_msgs import TwistStamped
+from geometry_msgs.msg  import TwistStamped
 from rclpy.time import Time
 import threading
 import time

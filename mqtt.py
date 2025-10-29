@@ -65,7 +65,7 @@ class MQTT_Transmitter:
 # Test code if class is run as main
 if __name__ == '__main__':
     # Get mqtt host information
-    server = "192.168.0.20"
+    server = "10.17.116.254"
     port = 1883
     topic = "mqtt_vel"
 
