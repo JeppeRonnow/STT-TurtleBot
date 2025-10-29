@@ -1,6 +1,13 @@
 import time
+import sys
+import signal
+
+
 import RPi.GPIO as GPIO
 import threading as thread
+
+import VL53L1X
+
 
 class TOF_Sensor:
     # Variables
@@ -15,13 +22,7 @@ class TOF_Sensor:
         GPIO.setmode(GPIO.BCM)    # or GPIO.BOARD for physical numbering
         GPIO.setup(self.LED_PIN, GPIO.OUT)
 
-<<<<<<< Updated upstream
         self.blink_led()
-=======
-
-    def make_roi(top, left, bottom, right): 
-
->>>>>>> Stashed changes
 
         self.floor_distance = self.get_floor_distance()
         thread.Thread(target = self.object_detection).start()
@@ -42,9 +43,9 @@ class TOF_Sensor:
     def blink_led(self):
         try:
             while True:
-                GPIO.output(LED_PIN, GPIO.HIGH)
+                GPIO.output(self.LED_PIN, GPIO.HIGH)
                 time.sleep(0.5)
-                GPIO.output(LED_PIN, GPIO.LOW)
+                GPIO.output(self.LED_PIN, GPIO.LOW)
                 time.sleep(0.5)
         except KeyboardInterrupt:
             pass
