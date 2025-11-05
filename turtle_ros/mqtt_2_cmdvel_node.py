@@ -5,7 +5,8 @@ import paho.mqtt.client as mqtt
 import json
 import threading
 
-from  mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
+from mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
+from mqtt_2_cmd_pkg.tof_sensor import TOF_Sensor
 
 BURGER_MAX_LIN_VEL = 0.22
 BURGER_MAX_ANG_VEL = 2.84
@@ -58,11 +59,15 @@ class MqttToCmdVelNode(Node):
 
         # Subscribe to the MQTT topic
         self.mqtt_client.subscribe(mqtt_topic)
-
         self.get_logger().info(f"Subscribed to MQTT topic: {mqtt_topic}")
+        
+        # Init Position tracking for robot to enable return for the robot
+        self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock()) # Tracks position of robot
 
-        self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock())
-
+        # For checking collision with realworld of robot
+        self.Tof_sensor = TOF_Sensor(self.get_logger(), self.get_clock())
+        self.collision_thread = None
+        self.collision_thread_flag = threading.Event()
 
     # When connecting to MQTT broker
     def on_connect(self, client, userdata, falgs, rc):
@@ -80,27 +85,24 @@ class MqttToCmdVelNode(Node):
 
             # Check if comand is return
             if (payload['linear']['x'] == 69.69 and payload['angular']['z'] == 69.69):
-                self.Pos_tracker.save_step(self.create_twist_msg(0.0, 0.0))
+                self.start_return()
+                return 
 
-                if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
-                    return
-
-                self.Pos_tracker.return_thread = threading.Thread(
-                    target=self.Pos_tracker.return_to_start,
-                    args=(self.publisher,),
-                    daemon=True
-                )
-                self.Pos_tracker.return_thread.start()
-
-                return
-
-            # Check if meassage fit within constraints
-            linear_vel = check_linear_limit_velocity(payload['linear']['x'])
-            angular_vel = check_angular_limit_velocity(payload['angular']['z'])
-
+            # Check if return is active
             if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
                 self.Pos_tracker.return_stop_flag.set()
+                self.Pos_tracker.return_thread.join()
 
+            # Check if collision detection is active before we start a new thread
+            if self.collision_thread and self.collision_thread.is_alive():
+                self.collision_thread_flag.set()    # Set stop flag for collision_thread
+                self.collision_thread.join()        # Wait for collision_thread to stop safely
+
+            self.start_collision_detection()        # Start collision_thread
+
+            # Check if meassage fit within constraints, and constrain if nescesarry
+            linear_vel = check_linear_limit_velocity(payload['linear']['x'])
+            angular_vel = check_angular_limit_velocity(payload['angular']['z'])
 
             # Create a Twist message
             twist_msg = self.create_twist_msg(linear_vel, angular_vel)
@@ -109,7 +111,7 @@ class MqttToCmdVelNode(Node):
             self.publisher.publish(twist_msg)
             self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
 
-            self.Pos_tracker.save_step(twist_msg)
+            self.Pos_tracker.save_step(twist_msg) # Save velocities and time to list of steps
 
         except json.JSONDecodeError:
             self.get_logger().error("Failed to decode JSON from MQTT message.")
@@ -124,6 +126,51 @@ class MqttToCmdVelNode(Node):
         twist_msg.twist.linear.x = float(linear_vel)
         twist_msg.twist.angular.z = float(angular_vel)
         return twist_msg
+
+
+    # Starts the return of the robot
+    def start_return(self):
+        # Make sure robot is stationary and nescesarry for time calculation if return is called while robot is moveing
+        twist_msg_stop = self.create_twist_msg(0.0, 0.0)
+        self.Pos_tracker.save_step(twist_msg_stop)
+        
+        # If return method is already running continue returning and wait for new msg
+        if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
+            return
+
+        # Setup thread to run the return method and start it
+        self.Pos_tracker.return_thread = threading.Thread(
+            target=self.Pos_tracker.return_to_start,
+            args=(self.publisher,),
+            daemon=True
+        )
+        self.Pos_tracker.return_thread.start()
+
+
+    # Start thread for collision detection 
+    def start_collision_detection(self):
+        self.collision_thread = threading.Thread(
+            target=self.collision_detection,
+            args=(),
+            daemon=True
+        )
+        self.collision_thread.start()
+
+
+    # Is run as a thread from the on_message function
+    def collision_detection(self):
+        # Keep checking if there is a collision
+        while not self.collision_thread_flag.is_set():
+            is_collision = self.Tof_sensor.object_detection() # Returns true if a collision is detected, false otherwise
+            if is_collision:
+                break
+
+        # Publish stop velocities only in case of collision
+        if not self.collision_thread_flag.is_set():
+            twist_msg = self.create_twist_msg(0.0, 0.0)
+            self.publisher.publish(twist_msg)
+
+            self.Pos_tracker.save_step(twist_msg) # Save the stop steps
 
 
 def main(args=None):
