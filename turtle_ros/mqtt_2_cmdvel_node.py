@@ -85,6 +85,7 @@ class MqttToCmdVelNode(Node):
 
             # Check if comand is return
             if (payload['linear']['x'] == 69.69 and payload['angular']['z'] == 69.69):
+<<<<<<< HEAD
                 self.start_collision_detection()
                 self.start_return()
                 return 
@@ -102,6 +103,27 @@ class MqttToCmdVelNode(Node):
             linear_vel = check_linear_limit_velocity(payload['linear']['x'])
             angular_vel = check_angular_limit_velocity(payload['angular']['z'])
 
+=======
+                self.start_return()
+                return 
+
+            # Check if return is active
+            if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
+                self.Pos_tracker.return_stop_flag.set()
+                self.Pos_tracker.return_thread.join()
+
+            # Check if collision detection is active before we start a new thread
+            if self.collision_thread and self.collision_thread.is_alive():
+                self.collision_thread_flag.set()    # Set stop flag for collision_thread
+                self.collision_thread.join()        # Wait for collision_thread to stop safely
+
+            self.start_collision_detection()        # Start collision_thread
+
+            # Check if meassage fit within constraints, and constrain if nescesarry
+            linear_vel = check_linear_limit_velocity(payload['linear']['x'])
+            angular_vel = check_angular_limit_velocity(payload['angular']['z'])
+
+>>>>>>> 46896e9 (Rebase with main so it's up to date)
             # Create a Twist message
             twist_msg = self.create_twist_msg(linear_vel, angular_vel)
 
@@ -155,6 +177,7 @@ class MqttToCmdVelNode(Node):
         self.collision_thread.start()
 
 
+<<<<<<< HEAD
     # Checks if the return_thread is active and stops it if it active
     def stop_return_thread_if_active(self):
         if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
@@ -169,6 +192,8 @@ class MqttToCmdVelNode(Node):
                 self.collision_thread.join()        # Wait for collision_thread to stop safely
 
 
+=======
+>>>>>>> 46896e9 (Rebase with main so it's up to date)
     # Is run as a thread from the on_message function
     def collision_detection(self):
         # Keep checking if there is a collision
@@ -182,9 +207,12 @@ class MqttToCmdVelNode(Node):
             twist_msg = self.create_twist_msg(0.0, 0.0)
             self.publisher.publish(twist_msg)
 
+<<<<<<< HEAD
             # Check if the return thread is active and if active stop it
             self.stop_return_thread_if_active()
 
+=======
+>>>>>>> 46896e9 (Rebase with main so it's up to date)
             self.Pos_tracker.save_step(twist_msg) # Save the stop steps
 
 
