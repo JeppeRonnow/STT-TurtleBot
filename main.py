@@ -15,11 +15,11 @@ def main():
     config = Config() # Load config variables from YAML file
 
     # Init objects
+    mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)                                                                                    # MQTT_Transmitter
     filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.DEBUG)                                                     # Bandpass filter
-    logic = Logic(config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE_CM, config.DEBUG)                                # Logic control
+    logic = Logic(mqtt, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
     audio = Record(config.SAMPLE_RATE, config.DEBUG)                                                                                          # Audio recorder
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
-    turtle = MQTT_Transmitter(config.SERVER, config.DEBUG)                                                                                    # MQTT_Transmitter
 
     # Load Whisper STT model
     model = whisper.load_model()
@@ -64,21 +64,20 @@ def main():
                 payload, consumed = logic.handle_transcription(words)
                 if payload:
                     if config.DEBUG: print("[Payload]:", payload)
-                    
                     velocities = logic.payload_to_velocities(payload)
-                    #turtle.publish_command(velocities[0], velocities[1])
+                    mqtt.publish_command(velocities[0], velocities[1])
                 if consumed:
-                    if config.DEBUG: print("Consumed:", consumed)
+                    if config.DEBUG: print("[Consumed]:", consumed)
                     whisper.strip_transcription(consumed)
 
     except KeyboardInterrupt:
         print("\nCtrl+C pressed. Sending stop command (linear.x=0, angular.z=0) and disconnecting.")
 
         # Send stop command with zero velocities
-        turtle.publish_command(0.0, 0.0)
+        mqtt.publish_command(0.0, 0.0)
 
     finally:
-        turtle.close_connectio()
+        mqtt.close_connectio()
 
 if __name__ == "__main__":
     try:
