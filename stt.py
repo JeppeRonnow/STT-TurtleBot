@@ -68,8 +68,8 @@ class STT:
     def add_transcription(self, word: str):
         w = self.clean_word(word)
         self.transcription.append(w)
-        if len(self.transcription) > self.max_tokens:
-            del self.transcription[:-self.max_tokens]
+        if len(self.transcription) > self.max_buffer_length:
+            del self.transcription[:-self.max_buffer_length]
 
 
     def get_transcription(self):
@@ -78,7 +78,7 @@ class STT:
 
 
     def print_transcription(self):
-        print("[Current transcription]:", " ".join(self.transcription))
+        print("\n[Current transcription]:", " ".join(self.transcription))
 
 
     def strip_transcription(self, x: int):

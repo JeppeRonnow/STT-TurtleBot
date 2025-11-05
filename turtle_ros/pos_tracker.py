@@ -6,10 +6,12 @@ import time
 
 class Pos_tracker:
 
-    def __init__(self):
+    def __init__(self, logger, clock):
         self.steps = []
         self.return_stop_flag = threading.Event()
         self.return_thread = None
+        self.logger = logger
+        self.clock = clock
 
 
     def return_to_start(self, publisher):
@@ -18,6 +20,9 @@ class Pos_tracker:
         while len(self.steps) > 1:
             if self.return_stop_flag.is_set():
                 break
+            
+            # Debug Print
+            self.logger.info(f"Current steps list = {len(self.steps)}.")
 
             twist_msg = self.steps[-2] # Get twist_msg for the step
 
@@ -27,8 +32,11 @@ class Pos_tracker:
                 continue
 
             # Calculate the drive time for the step
-            drive_time = Time.from_msg(twist_msg.header.stamp) - Time.from_msg(self.steps[-1].header.stamp)
+            drive_time = Time.from_msg(self.steps[-1].header.stamp) - Time.from_msg(twist_msg.header.stamp)
             drive_time = max(drive_time.nanoseconds / 1e9, 0.0)
+
+            # Print statement for debug
+            self.logger.info(f"Drive time: {drive_time}, original vel: {twist_msg.twist.linear.x}, {twist_msg.twist.angular.z}.")
 
             # Calcualte the inverse of the movement done in the step
             twist_msg.twist.linear.x *= -1
@@ -49,6 +57,12 @@ class Pos_tracker:
                 time.sleep(min(step, drive_time-waited))
                 waited += step
 
+        # Stop robot and clear the steps list
+        twist_msg = TwistStamped()
+        twist_msg.header.stamp = self.clock.now().to_msg()
+        twist_msg.twist.linear.x = float(0.0)
+        twist_msg.twist.angular.z = float(0.0)
+        publisher.publish(twist_msg)
         self.steps.clear()
 
     def save_step(self, twist_msg):
