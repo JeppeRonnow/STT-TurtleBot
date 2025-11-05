@@ -1,4 +1,5 @@
-from typing import List, Optional, Tuple, overload, Union
+from typing import List, Optional, Tuple, Union
+from mqtt_timer  import MqttTimer
 
 class Logic:
     # move_syn = {"move", "go", "walk", "drive"} Not currently in use
@@ -10,7 +11,6 @@ class Logic:
     fwd_syn = {"forward", "straight", "ahead"}
     back_syn = {"backward", "backwards", "reverse"}
 
-    deg_units = {"deg", "degree", "degrees"}
     dist_units = {"mm", "millimeter", "millimeters", "cm", "centimeter", "centimeters", "m", "meter", "meters"}
 
     # Listening delay before text pass
@@ -18,11 +18,16 @@ class Logic:
 
 
     # Object init
-    def __init__(self, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE_CM, DEBUG) -> None:
+    def __init__(self, mqtt_class, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
         self.PAUSE_ITTERATIONS = PAUSE_ITTERATIONS
         self.DEFAULT_TURN_DEG = DEFAULT_TURN_DEG
-        self.DEFAULT_DISTANCE_CM = DEFAULT_DISTANCE_CM
+        self.DEFAULT_DISTANCE = DEFAULT_DISTANCE
+        self.MOVE_VELOCITY = MOVE_VELOCITY
+        self.TURN_VELOCITY = TURN_VELOCITY
         self.DEBUG = DEBUG
+
+        self.timer = MqttTimer(mqtt_class, MOVE_VELOCITY, TURN_VELOCITY, DEBUG)
+
         if self.DEBUG: print(f"[Logic class initialized]")
 
 
@@ -44,49 +49,27 @@ class Logic:
             
             # Turn left/right
             if word in self.turn_syn:
-<<<<<<< HEAD
-                direction = ""
-
-                # Use the remaining words starting from current position
-                for j in range(i, n):
-                    if words[j] in self.dir_syn:
-                        direction = words[j]
-                   
-                payload = self.format_payload("turn", direction)
-                return payload, i + 1
-
-            # Move forwards
-            if word in self.fwd_syn:
-                payload = self.format_payload("move", "forward")
-                return payload, i + 1
-            
-            # Move backwards
-            if word in self.back_syn:
-                payload = self.format_payload("move", "forward")
-                return payload, i + 1
-
-=======
                 operation = "turn"
                 direction = None
                 distance = None
                 last_word_index = i
                 # Use the remaining words starting from current position
                 for j, current_word in enumerate(words):
-                    print(j, current_word)
+                    #if self.DEBUG: print(j, current_word)
                     if current_word in self.dir_syn:
                         direction = current_word
                         if j > last_word_index:
                             last_word_index = j
                     if self.is_number(current_word):
                         distance = self.format_number(current_word)
-                        if j > last_word_index: 
+                        if j > last_word_index:
                             last_word_index = j
                     if direction and distance:
                         break
                 if self.await_input(last_word_index, n, distance):
                     return None, 0
                 if not distance:
-                    distance = self.DEFAULT_TURN_DEG
+                    distance = self.format_number(self.DEFAULT_TURN_DEG)
                 if direction and distance:
                     consumed = last_word_index + 1
                     self.current_pause = 0
@@ -101,7 +84,7 @@ class Logic:
                 unit = None
                 last_word_index = i
                 for j, current_word in enumerate(words):
-                    print(j, current_word)
+                    #if self.DEBUG: print(j, current_word)
                     if self.is_number(current_word):
                         distance = self.format_number(current_word)
                         if j > last_word_index: 
@@ -115,7 +98,7 @@ class Logic:
                 if self.await_input(last_word_index, n, distance, unit):
                     return None, 0
                 if not distance:
-                    distance = self.DEFAULT_DISTANCE_CM
+                    distance = self.format_number(self.DEFAULT_DISTANCE)
                 if unit:
                     distance = self.format_unit(distance, unit)
                 if distance:
@@ -123,36 +106,12 @@ class Logic:
                     self.current_pause = 0
                     payload = self.format_payload(operation ,direction, distance)
                     return payload, consumed
->>>>>>> db3ed13 (Fixed logic and modified main script)
 
         return None, 0
 
 
-    # Convert payload to velocities
-    def payload_to_velocities(self, payload):
-        payload = payload.split(" ")
-
-        if payload == "stop":
-            return (0.0, 0.0)
-
-        if payload[0] == "return":
-            return (69.69, 69.69)
-
-        if payload[0] == "turn":
-            if payload[1] == "right":
-                return (0.0, -1.0)
-
-            return (0.0, 1.0)
-
-        if payload[0] == "move":
-            if payload[1] == "forward":
-                return (0.20, 0.0)
-            
-            return (-0.20, 0.0)
-        
-        return (0.0, 0.0)
-
-    def is_number(self, number: str) -> bool:
+    @staticmethod
+    def is_number(number: str) -> bool:
         try:
             float(number)
             return True
@@ -160,24 +119,27 @@ class Logic:
             return False
 
 
-    def format_unit(self, value: float, unit: Optional[str]) -> int:
+    @staticmethod
+    def format_unit(value: float, unit: Optional[str]) -> float:
         if not unit:
-            return int(round(value))
-        if unit in ("m", "meter", "meters"):
-            return int(round(value * 100))
+            return float(value)
+        if unit in ("cm", "centimeter", "centimeters"):
+            return float(value / 100)
         if unit in ("mm", "millimeter", "millimeters"):
-            return int(round(value / 10.0))
-        return int(round(value))
+            return float(value / 1000)
+        return float(value)
 
 
-    def format_number(self, number: str) -> int:
-        return int(round(float(number)))
+    @staticmethod
+    def format_number(number) -> float:
+        return float(number)
 
 
-    def format_payload(self, operation: str, *args: Union[str, int]) -> str:
+    @staticmethod
+    def format_payload(operation: str, *args: Union[str, float]) -> str:
         if not args:
             return operation
-        if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], int):
+        if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], float):
             if args[0] in ["left", "backward"]:
                 return f"{operation} -{args[1]}"
             else: 
@@ -205,30 +167,84 @@ class Logic:
             return True
 
         return False
+
+
+    # Convert payload to velocities
+    def payload_to_velocities(self, payload) -> Tuple[float, float]:
+        payload = payload.split(" ")
+
+        # Stop any existing timers
+        self.timer.stop_timer()
+
+        if payload[0] == "stop":
+            return (0.0, 0.0)
+
+        if payload[0] == "return":
+            return (69.69, 69.69)
+
+        if payload[0] == "turn" and payload[1]:
+            val = float(payload[1])
+
+            if val == 69.69 or val == -69.69:
+                return (0.0, self.TURN_VELOCITY) # Turn right
+            else:
+                self.timer.set_timer(payload[0], val)
+                if val > 0:
+                    return (0.0, -self.TURN_VELOCITY)
+            return (0.0, self.TURN_VELOCITY)
+
+        if payload[0] == "move" and payload[1]:
+            val = float(payload[1])
+            
+            if val == 69.69 or val == -69.69:
+                return (self.MOVE_VELOCITY, 0.0) # Move forward 
+            
+            else:
+                self.timer.set_timer(payload[0], val)
+                if val > 0:
+                    return (self.MOVE_VELOCITY, 0.0)
+                return (-self.MOVE_VELOCITY, 0.0)
+        
+        return (0.0, 0.0)
     
 
 if __name__ == "__main__":
+    from mqtt import MQTT_Transmitter
     from config import Config
     from logic import Logic
     from stt import STT
+    import time
 
     # Configuration parameters
     config = Config() # Load config variables from YAML file
-    logic = Logic(config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE_CM, config.DEBUG)                                # Logic control
+    mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)
+    logic = Logic(mqtt ,config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
 
     # Load Whisper STT model
     model = whisper.load_model()
 
-    string = "Hello hello, turn right 20 deg and then move backwards"
+    string = "Stop"
     for word in string.split():
         whisper.add_transcription(word)
-    for n in range(5):
+        words = whisper.get_transcription()
+    while words:
         whisper.print_transcription()
         words = whisper.get_transcription()
         payload, consumed = logic.handle_transcription(words)
         if payload:
             print("[Payload]:", payload)
+            velocities = logic.payload_to_velocities(payload)
+            print("[Velocities]:", velocities)
+            mqtt.publish_command(velocities[0], velocities[1])
         if consumed:
-            print("Consumed:", consumed)
+            print("[Consumed]:", consumed)
             whisper.strip_transcription(consumed)
+
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Exiting...")
+    finally:
+        mqtt.publish_command(0.0, 0.0)
