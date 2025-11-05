@@ -38,21 +38,15 @@ class TOF_Sensor:
         # initialize the sensor
         self.matrix = Matrix()
         GPIO.setmode(GPIO.BOARD)    # or GPIO.BOARD for physical numbering
-<<<<<<< HEAD
 
-=======
->>>>>>> 46896e9 (Rebase with main so it's up to date)
         GPIO.setup(self.LED_PIN, GPIO.OUT)
 
         self.blink_led()
 
         self.floor_distance = self.get_floor_distance()
-<<<<<<< HEAD
-=======
 
         print("[TOF Sensor initialized]")
 
->>>>>>> 46896e9 (Rebase with main so it's up to date)
 
     def make_roi(top, left, bottom, right):
         pass
@@ -104,7 +98,3 @@ if __name__ == "__main__":
         print("Shutting down TOF Sensor...")
     finally:
         GPIO.cleanup()
-<<<<<<< HEAD
-
-=======
->>>>>>> 46896e9 (Rebase with main so it's up to date)
