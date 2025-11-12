@@ -71,6 +71,30 @@ class STT:
         if len(self.transcription) > self.max_buffer_length:
             del self.transcription[:-self.max_buffer_length]
 
+    # wake word
+    def listen_for_wake_word(self, wake_words=None, window_size=5):
+        if wake_words is None:
+            wake_words = ["turtle"]
+        
+        # clean ord
+        wake_words = [self.clean_word(w) for w in wake_words]
+        
+        # get recent transcription
+        recent = self.transcription[-window_size:] if len(self.transcription) > 0 else []
+        
+        if self.DEBUG:
+            print(f"[Wake word] Checking: {recent}")
+        
+        # takes transcription and checks if one of wake words are init
+        for i, word in enumerate(recent):
+            if word in wake_words:
+                actual_position = len(self.transcription) - len(recent) + i
+                if self.DEBUG:
+                    print(f"[Wake word] Detected '{word}' at position {actual_position}")
+                return (True, word, actual_position)
+        
+        return (False, None, -1)
+
 
     def get_transcription(self):
         # return a shallow copy to avoid race with strip
@@ -107,3 +131,42 @@ class STT:
     
     def clear_transcribe(self):
         self.transcription = []
+
+if __name__ == "__main__":
+    import sounddevice as sd
+    from config import Config
+    from dsp import DSP
+    
+    config = Config()
+    filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.DEBUG)
+    stt = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)
+    model = stt.load_model()
+    
+    print("Say 'turtle' to test wake word detection. Ctrl+C to stop.\n")
+    
+    blocksize = int(config.CHUNK_SECONDS * config.SAMPLE_RATE)
+    
+    try:
+        with sd.InputStream(channels=1, samplerate=config.SAMPLE_RATE, blocksize=blocksize, dtype='float32', callback=stt.audio_callback, device=config.AUDIO_DEVICE):
+            while True:
+                try:
+                    stt.get_tick_q(timeout=1.0)
+                except queue.Empty:
+                    continue
+                
+                with stt.get_buffer_lock():
+                    if not stt.get_audio_buffer():
+                        continue
+                    raw = np.array(stt.get_audio_buffer(), dtype=np.float32)
+                
+                filtered = filter.normalize(filter.apply_filters(raw))
+                stt.transcribe(model, filtered)
+                stt.print_transcription()
+                
+                detected, wake_word, position = stt.listen_for_wake_word()
+                if detected:
+                    print(f"\nWAKE WORD '{wake_word}' DETECTED!\n")
+                    stt.strip_transcription(position + 1)
+                    
+    except KeyboardInterrupt:
+        print("\nStopped.")
