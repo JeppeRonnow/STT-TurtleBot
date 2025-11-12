@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple, Union
-from mqtt_timer  import MqttTimer
+from mqtt  import Mqtt_Timer
 
 class Logic:
     # move_syn = {"move", "go", "walk", "drive"} Not currently in use
@@ -26,7 +26,7 @@ class Logic:
         self.TURN_VELOCITY = TURN_VELOCITY
         self.DEBUG = DEBUG
 
-        self.timer = MqttTimer(mqtt_class, MOVE_VELOCITY, TURN_VELOCITY, DEBUG)
+        self.timer = Mqtt_Timer(mqtt_class, MOVE_VELOCITY, TURN_VELOCITY, DEBUG)
 
         if self.DEBUG: print(f"[Logic class initialized]")
 
