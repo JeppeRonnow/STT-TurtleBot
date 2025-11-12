@@ -5,6 +5,7 @@ from collections import deque
 import threading
 import queue
 
+import sounddevice as sd # for simple wake
 
 class STT:
     model_name = ""
@@ -96,6 +97,31 @@ class STT:
         return (False, None, -1)
 
 
+    # even simpler wake
+    def simple_wake_word(self, wake_word="turtle", duration=4):
+        print(f"Listening for wake word: '{wake_word}'")
+        
+        samplerate = 16000
+        chunk_samples = int(samplerate * duration)
+        
+        while True:
+            # Record audio chunk
+            audio = sd.rec(chunk_samples, samplerate=samplerate, channels=1, dtype='float32')
+            sd.wait()  # Wait until recording is finished
+            audio = audio.flatten()
+            
+            # Transcribe
+            result = self.model.transcribe(audio, fp16=False, language="en")
+            text = result["text"].lower().strip()
+            
+            print(f"You said: {text}")
+            
+            # Check for wake word
+            if wake_word in text:
+                print(f"Wake word '{wake_word}' detected!")
+                return True
+
+
     def get_transcription(self):
         # return a shallow copy to avoid race with strip
         return list(self.transcription)
@@ -132,41 +158,20 @@ class STT:
     def clear_transcribe(self):
         self.transcription = []
 
+
 if __name__ == "__main__":
-    import sounddevice as sd
     from config import Config
-    from dsp import DSP
     
     config = Config()
-    filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.DEBUG)
-    stt = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)
+    stt = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, 
+              config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)
+    
     model = stt.load_model()
+    stt.model = model  # Store model in the instance
     
-    print("Say 'turtle' to test wake word detection. Ctrl+C to stop.\n")
+    print("Simple wake word test\n")
     
-    blocksize = int(config.CHUNK_SECONDS * config.SAMPLE_RATE)
+    # Wait for wake word
+    stt.simple_wake_word("turtle", duration=3)
     
-    try:
-        with sd.InputStream(channels=1, samplerate=config.SAMPLE_RATE, blocksize=blocksize, dtype='float32', callback=stt.audio_callback, device=config.AUDIO_DEVICE):
-            while True:
-                try:
-                    stt.get_tick_q(timeout=1.0)
-                except queue.Empty:
-                    continue
-                
-                with stt.get_buffer_lock():
-                    if not stt.get_audio_buffer():
-                        continue
-                    raw = np.array(stt.get_audio_buffer(), dtype=np.float32)
-                
-                filtered = filter.normalize(filter.apply_filters(raw))
-                stt.transcribe(model, filtered)
-                stt.print_transcription()
-                
-                detected, wake_word, position = stt.listen_for_wake_word()
-                if detected:
-                    print(f"\nWAKE WORD '{wake_word}' DETECTED!\n")
-                    stt.strip_transcription(position + 1)
-                    
-    except KeyboardInterrupt:
-        print("\nStopped.")
+    print("\nWake word detected! Exiting...")
