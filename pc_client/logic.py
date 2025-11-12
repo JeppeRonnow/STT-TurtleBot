@@ -18,7 +18,7 @@ class Logic:
 
 
     # Object init
-    def __init__(self, mqtt_class, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
+    def __init__(self, move_timer, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
         self.PAUSE_ITTERATIONS = PAUSE_ITTERATIONS
         self.DEFAULT_TURN_DEG = DEFAULT_TURN_DEG
         self.DEFAULT_DISTANCE = DEFAULT_DISTANCE
@@ -26,7 +26,7 @@ class Logic:
         self.TURN_VELOCITY = TURN_VELOCITY
         self.DEBUG = DEBUG
 
-        self.timer = Mqtt_Timer(mqtt_class, MOVE_VELOCITY, TURN_VELOCITY, DEBUG)
+        self.timer = move_timer
 
         if self.DEBUG: print(f"[Logic class initialized]")
 
