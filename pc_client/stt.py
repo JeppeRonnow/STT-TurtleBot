@@ -9,18 +9,6 @@ import whisper
 
 
 class STT:
-    model_name = ""
-    model_device = ""
-    max_buffer_samples = 0
-    buffer_lock = threading.Lock()
-    audio_buffer = deque()
-    tick_q = queue.Queue()
-    error_words = ""
-    max_buffer_length = 0
-    transcription = []
-    DEBUG = False
-
-    # Object init
     def __init__(
         self,
         MODEL_NAME,
@@ -35,6 +23,10 @@ class STT:
         self.max_buffer_samples = BUFFER_SECONDS * SAMPLERATE
         self.max_buffer_length = MAX_BUFFER_LENGTH
         self.DEBUG = DEBUG
+        self.buffer_lock = threading.Lock()
+        self.audio_buffer = deque()
+        self.tick_q = queue.Queue()
+        self.transcription = []
         if self.DEBUG:
             print(f"[STT class initialized]")
 
@@ -166,8 +158,8 @@ class STT:
 
     def clean_word(self, word: str) -> str:
         w = word.lower().strip()
-        for char in ".,!?;:()[]{}\"'''`…":
-            w = w.replace(char, "")
+        punct_to_remove = str.maketrans("", "", ".,!?;:()[]{}\"'''`…")
+        w = w.translate(punct_to_remove)
         w = " ".join(w.split())
         return w
 
