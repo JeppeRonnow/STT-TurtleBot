@@ -159,19 +159,81 @@ class STT:
         self.transcription = []
 
 
+    def test_wake_word(model_path: str = None, model_name: str = None,
+                       threshold: float = 0.6, cooldown_sec: float = 2.0,
+                       smooth_n: int = 5, rate: int = 16000, chunk_ms: int = 80):
+        """Simple test listener using openwakeword. Pass either a trained model name
+        (legacy) or a full path to an ONNX file via model_path. When model_path is
+        provided the function will use the ONNX inference framework and derive
+        the model key from the filename if model_name is not given.
+        """
+        # Lazy import to avoid requiring openwakeword at module import-time
+        from openwakeword import Model
+        from collections import deque
+        from pathlib import Path
+
+        # If a model file is provided, use ONNX and derive model name from filename
+        if model_path:
+            model_file = str(Path(model_path))
+            inferred_name = Path(model_file).stem
+            model_key = model_name or inferred_name
+            oww = Model(wakeword_models=[model_file], inference_framework="onnx")
+        else:
+            # Fallback to legacy name-based usage (keeps backward compatibility)
+            model_key = model_name or WAKEWORD_NAME
+            oww = Model(wakeword_models=[model_key], inference_framework="tflite")
+
+        recent_scores = deque(maxlen=smooth_n)
+        last_trigger = -1e9
+
+        def test_record():
+            print("record() called – implement your post-wake logic here.")
+
+        CHUNK_SAMPLES = int(rate * chunk_ms / 1000.0)
+
+        def callback(indata, frames, time_info, status):
+            nonlocal last_trigger
+            if status:
+                return
+            audio = (indata[:, 0] * 32767).astype(np.int16)
+            scores = oww.predict(audio)
+            score = scores.get(model_key, 0.0)
+            recent_scores.append(score)
+            smooth = float(np.mean(recent_scores)) if len(recent_scores) > 0 else 0.0
+            print(f"{model_key} prob (smoothed): {smooth:.3f}", end="\r")
+            if smooth >= threshold and (time.time() - last_trigger) >= cooldown_sec:
+                last_trigger = time.time()
+                print(f"\nWake word detected (score={smooth:.3f} ≥ {threshold:.3f})")
+                test_record()
+
+        print(f"Listening for wake word: {model_key}")
+        with sd.InputStream(channels=1, samplerate=rate, blocksize=CHUNK_SAMPLES, dtype="float32", callback=callback):
+            try:
+                while True:
+                    time.sleep(0.25)
+            except KeyboardInterrupt:
+                print("\nStopping...")
+
+
 if __name__ == "__main__":
-    from config import Config
-    
-    config = Config()
-    stt = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, 
-              config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)
-    
-    model = stt.load_model()
-    stt.model = model  # Store model in the instance
-    
-    print("Simple wake word test\n")
-    
-    # Wait for wake word
-    stt.simple_wake_word("turtle", duration=3)
-    
-    print("\nWake word detected! Exiting...")
+    from pathlib import Path
+    import time
+
+    # Constants (kept for reference / backward compatibility)
+    THRESHOLD = 0.6
+    COOLDOWN_SEC = 2.0
+    SMOOTH_N = 5
+    RATE = 16000
+    CHUNK_MS = 80
+    CHUNK_SAMPLES = int(RATE * CHUNK_MS / 1000.0)
+    WAKEWORD_NAME = "Turtlebot"
+
+    # Use the ONNX model file located in the repository's wake_word folder.
+    # This resolves relative to the repo layout: pc_client/.. -> repo root
+    model_file = Path(__file__).parent.parent / "wake_word" / "turtlebot.onnx"
+    print(f"Using ONNX wake word model: {model_file}")
+
+    # Call the test helper with the model file path (uses ONNX inference)
+    stt = STT.test_wake_word(model_path=str(model_file), model_name=None,
+                             threshold=THRESHOLD, cooldown_sec=COOLDOWN_SEC,
+                             smooth_n=SMOOTH_N, rate=RATE, chunk_ms=CHUNK_MS)
