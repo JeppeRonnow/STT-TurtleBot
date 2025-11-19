@@ -1,10 +1,12 @@
-import numpy as np
-import whisper
-import time
+from openwakeword import Model
 from collections import deque
+from pathlib import Path
+import sounddevice as sd
+import numpy as np
 import threading
+import whisper
 import queue
-
+import time
 
 class STT:
     model_name = ""
@@ -71,6 +73,55 @@ class STT:
         if len(self.transcription) > self.max_buffer_length:
             del self.transcription[:-self.max_buffer_length]
 
+    # wake word
+    def listen_for_wake_word(self, wake_words=None, window_size=5):
+        if wake_words is None:
+            wake_words = ["turtle"]
+        
+        # clean ord
+        wake_words = [self.clean_word(w) for w in wake_words]
+        
+        # get recent transcription
+        recent = self.transcription[-window_size:] if len(self.transcription) > 0 else []
+        
+        if self.DEBUG:
+            print(f"[Wake word] Checking: {recent}")
+        
+        # takes transcription and checks if one of wake words are init
+        for i, word in enumerate(recent):
+            if word in wake_words:
+                actual_position = len(self.transcription) - len(recent) + i
+                if self.DEBUG:
+                    print(f"[Wake word] Detected '{word}' at position {actual_position}")
+                return (True, word, actual_position)
+        
+        return (False, None, -1)
+
+
+    # even simpler wake
+    def simple_wake_word(self, wake_word="turtle", duration=4):
+        print(f"Listening for wake word: '{wake_word}'")
+        
+        samplerate = 16000
+        chunk_samples = int(samplerate * duration)
+        
+        while True:
+            # Record audio chunk
+            audio = sd.rec(chunk_samples, samplerate=samplerate, channels=1, dtype='float32')
+            sd.wait()  # Wait until recording is finished
+            audio = audio.flatten()
+            
+            # Transcribe
+            result = self.model.transcribe(audio, fp16=False, language="en")
+            text = result["text"].lower().strip()
+            
+            print(f"You said: {text}")
+            
+            # Check for wake word
+            if wake_word in text:
+                print(f"Wake word '{wake_word}' detected!")
+                return True
+
 
     def get_transcription(self):
         # return a shallow copy to avoid race with strip
@@ -107,3 +158,107 @@ class STT:
     
     def clear_transcribe(self):
         self.transcription = []
+
+
+class WakeWord:
+    def __init__(self, MODEL_PATH: str, SAMPLE_RATE: float, BLOCK_SIZE: float, THRESHOLD: float, COOLDOWN: float, DEBUG: bool):
+        self.MODEL_PATH = MODEL_PATH
+        self.THRESHOLD = THRESHOLD
+        self.COOLDOWN = COOLDOWN
+        self.SAMPLE_RATE = SAMPLE_RATE
+        self.BLOCK_SIZE = BLOCK_SIZE
+        self.DEBUG = DEBUG
+        
+        self.last_detection = 0.0
+
+        if self.debug:
+            print(f"[WakeWord] Loading model from: {self.MODEL_PATH}")
+
+        self.wakeWord = Model(
+                wakeword_model_paths=[self.MODEL_PATH],
+                enable_speex_noise_suppression=True
+            )
+
+        if self.debug:
+            print("[WakeWord] Model loaded successfully.")
+
+    def listen(self):
+        with sd.InputStream(
+                channels=1,
+                samplerate=self.SAMPLE_RATE,
+                blocksize=self.BLOCK_SIZE,
+                dtype="float32",
+                callback=self.callback,
+            ):
+            if self.CONFIG: print("Listening for wake word... Press Ctrl+C to stop.")
+
+    def callback(self, indata, frames, time_info, status):
+        # Convert float32 [-1, 1] to int16 [-32768, 32767]
+        audio_int16 = (indata[:, 0] * 32767).astype(np.int16)
+        
+        # Get predictions
+        scores = wakeWord.predict(audio_int16)
+
+        now = time.time()
+        for name, score in scores.items():
+            if self.CONFIG: print(f"Model: {name}, Score: {score:.6f}")
+            if score >= self.THRESHOLD:
+                if (now - last_detection) > self.COOLDOWN:
+                    last_detection = now
+                    if self.CONFIG: print("Wake word detected")
+
+
+if __name__ == "__main__":
+    import time
+    import numpy as np
+    import sounddevice as sd
+    from pathlib import Path
+    from openwakeword import Model
+
+    SAMPLE_RATE = 16000
+    BLOCK_SIZE = 1280          # 80ms chunks (optimal for openWakeWord)
+    THRESHOLD = 0.002          # adjust per model
+    COOLDOWN = 2.0           # debounce detections
+    
+    last_detection = 0.0
+
+    # Resolve model path using pathlib
+    parrent = Path(__file__).resolve().parents[1]
+    model_path = parrent / "wake_word/Turtlebot-2.onnx"
+
+    print(f"Loading wake-word model: {model_path}")
+    wakeWord = Model(
+        wakeword_model_paths=[str(model_path)],
+        enable_speex_noise_suppression=True,
+    )
+
+    def callback(indata, frames, time_info, status):
+        global last_detection
+
+        # Convert float32 [-1, 1] to int16 [-32768, 32767]
+        audio_int16 = (indata[:, 0] * 32767).astype(np.int16)
+        
+        # Get predictions
+        scores = wakeWord.predict(audio_int16)
+
+        now = time.time()
+        for name, score in scores.items():
+            print(f"Model: {name}, Score: {score:.6f}")
+            if score >= THRESHOLD:
+                if (now - last_detection) > COOLDOWN:
+                    last_detection = now
+                    print("Wake word detected")
+
+    with sd.InputStream(
+            channels=1,
+            samplerate=SAMPLE_RATE,
+            blocksize=BLOCK_SIZE,
+            dtype="float32",
+            callback=callback,
+        ):
+        print("Listening for wake word... Press Ctrl+C to stop.")
+        try:
+            while True:
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            pass

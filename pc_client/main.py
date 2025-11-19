@@ -7,6 +7,7 @@ import time
 from mqtt import MQTT_Transmitter
 from config import Config
 from record import Record
+from stt import WakeWord
 from logic import Logic
 from move_timer import Move_Timer
 from stt import STT
@@ -23,6 +24,7 @@ def main():
     logic = Logic(move_timer, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
     audio = Record(config.SAMPLE_RATE, config.DEBUG)                                                                                      # Audio recorder
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
+    wakeWord = WakeWord(config.WAKE_WORD_MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.WAKE_WORD_COOLDOWN, config.DEBUG)                                                        # Wake word detection
 
     # Load Whisper STT model
     model = whisper.load_model()
@@ -31,7 +33,11 @@ def main():
     blocksize = int(config.CHUNK_SECONDS * config.SAMPLE_RATE)
 
     try:
-        with sd.InputStream(channels=1, samplerate=config.SAMPLE_RATE, blocksize=blocksize, dtype='float32', callback=whisper.audio_callback, device=config.AUDIO_DEVICE):
+        with sd.InputStream(channels=1, 
+                            samplerate=config.SAMPLE_RATE, 
+                            blocksize=blocksize, dtype='float32', 
+                            callback=whisper.audio_callback, 
+                            device=config.AUDIO_DEVICE):
             while True:
                 try:    # Wait for next chunk signal
                     whisper.get_tick_q(timeout=1.0)
