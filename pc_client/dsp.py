@@ -1,34 +1,112 @@
-from scipy.signal import butter, sosfiltfilt
+from scipy.signal import butter, lfilter
 import numpy as np
 
+
 class DSP:
-    filter = ""
+    n, d = [None, None]
+    sample_rate = None
+    high_cut_hz = None
+    low_cut_hz = None
+    order = None
 
-    # Create filter on objct init
-    def __init__(self, sample_rate, highpass_hz, lowpass_hz, DEBUG) -> None:
-        self.filter = self.design_bandpass_filter(sample_rate, highpass_hz, lowpass_hz)
+    def __init__(self, sample_rate, low_cut_hz, high_cut_hz, order, DEBUG):
+        self.sample_rate = sample_rate
+        self.low_cut_hz = low_cut_hz
+        self.high_cut_hz = high_cut_hz
+        self.order = order
         self.DEBUG = DEBUG
-        if self.DEBUG: print("[DSP class initialized]")
+
+        self.n, self.d =self.create_filter() # Create the filter
+
+        if self.DEBUG: print("DSP calss initalized")
 
 
-    # Create band-pass filter
-    def design_bandpass_filter(self, sr: int, hp: float, lp: float, order: int = 4):
-        self.filter = butter(order, [hp / (0.5 * sr), lp / (0.5 * sr)], btype='bandpass', output='sos')
-        return self.filter
+    # Create filter
+    def create_filter(self):
+        nquist = 0.5 * self.sample_rate
+        low_cut = self.low_cut_hz / nquist
+        high_cut = self.high_cut_hz / nquist
+        n, d = butter(self.order, [low_cut, high_cut], btype='bandpass')
+
+        if self.DEBUG:
+            n = "[" + " ".join(f"{x:.16g}" for x in filter.n) + "]"
+            d = "[" + " ".join(f"{x:.16g}" for x in filter.d) + "]"
+            print("n = " + n + ";")
+            print("d = " + d + ";")
+
+        return n, d
 
 
-    # Apply band-pass filter to audio signal
-    def apply_filters(self, audio: np.ndarray):
-        if audio.size == 0:
-            return audio
-        audio = sosfiltfilt(self.filter, audio).astype(np.float32)   # apply band-pass filter
-        return audio
+    # Apply bandpass filter to adio
+    def apply_filters(self, audio):
+        return lfilter(self.n, self.d, audio)
 
 
-    # Normalize audio signal after filtering
-    def normalize(self, audio: np.ndarray):
-        peak = np.max(np.abs(audio)) if audio.size else 1.0
-        if peak > 0:
-            audio = (audio / peak * 0.95).astype(np.float32)
-        return audio
+    # Normalize audio
+    def normalize(self, audio):
+        max_val = np.max(np.abs(audio))
+        if max_val > 0:
+            audio = audio / max_val
+        audio = np.clip(audio, -1.0, 1.0)
 
+        return audio.astype(np.float32)
+
+
+if __name__ == '__main__':
+    fs = 16000
+    lp = 120
+    hp = 5000
+    order = 4
+
+    filter = DSP(fs, lp, hp, order, False)
+
+    n = "[" + " ".join(f"{x:.16g}" for x in filter.n) + "]"
+    d = "[" + " ".join(f"{x:.16g}" for x in filter.d) + "]"
+
+    print("n = " + n + ";")
+    print("d = " + d + ";")
+
+    # Plot raw, filtered and normalized file.
+    import soundfile as sf
+    import matplotlib.pyplot as plt
+
+    # Read audio file
+    file_name = "Raw.wav"
+    audio, sample_rate = sf.read(file_name, dtype='float32')
+
+    # Handle if audio file is not mono
+    if audio.ndim > 1:
+        audio = audio[:, 0]
+
+    # Create time axis
+    time = np.arange(audio.shape[0]) / sample_rate
+
+    # Filter and normalize audio
+    audio_filter = filter.apply_filters(audio)
+    audio_norm = filter.normalize(audio_filter)
+
+    # Plot audio
+    plt.figure(figsize=(10,4))
+    plt.plot(time, audio, color='blue')
+    plt.xlabel("Time [s]")
+    plt.ylabel("Amplitude")
+    plt.title("Waveform of " + file_name)
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.figure(figsize=(10,4))
+    plt.plot(time, audio_filter, color='blue')
+    plt.xlabel("Time [s]")
+    plt.ylabel("Amplitude")
+    plt.title("Waveform of filtered audio")
+    plt.grid(True)
+    plt.tight_layout()
+
+    plt.figure(figsize=(10,4))
+    plt.plot(time, audio_norm, color='blue')
+    plt.xlabel("Time [s]")
+    plt.ylabel("Amplitude")
+    plt.title("Waveform of normalized audio")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
