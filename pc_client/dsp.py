@@ -29,8 +29,8 @@ class DSP:
         n, d = butter(self.order, [low_cut, high_cut], btype='bandpass')
 
         if self.DEBUG:
-            n = "[" + " ".join(f"{x:.16g}" for x in filter.n) + "]"
-            d = "[" + " ".join(f"{x:.16g}" for x in filter.d) + "]"
+            n = "[" + " ".join(f"{x:.16g}" for x in n) + "]"
+            d = "[" + " ".join(f"{x:.16g}" for x in d) + "]"
             print("n = " + n + ";")
             print("d = " + d + ";")
 
@@ -54,8 +54,8 @@ class DSP:
 
 if __name__ == '__main__':
     fs = 16000
-    lp = 120
-    hp = 5000
+    lp = 120.0
+    hp = 5000.0
     order = 4
 
     filter = DSP(fs, lp, hp, order, False)
@@ -69,17 +69,11 @@ if __name__ == '__main__':
     # Plot raw, filtered and normalized file.
     import soundfile as sf
     import matplotlib.pyplot as plt
+    from record import Record
 
     # Read audio file
     file_name = "Raw.wav"
-    audio, sample_rate = sf.read(file_name, dtype='float32')
-
-    # Handle if audio file is not mono
-    if audio.ndim > 1:
-        audio = audio[:, 0]
-
-    # Create time axis
-    time = np.arange(audio.shape[0]) / sample_rate
+    audio, sample_rate, time = Record.get_audio(file_name)
 
     # Filter and normalize audio
     audio_filter = filter.apply_filters(audio)

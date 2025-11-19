@@ -21,7 +21,7 @@ def main():
     mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG) # MQTT_Transmitter
     move_timer = Move_Timer(mqtt, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
     logic = Logic(move_timer, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG) # Logic control
-    filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.DEBUG) # Bandpass filter
+    filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.FILTER_ORDER, config.DEBUG) # Bandpass filter
     audio = Record(config.SAMPLE_RATE, config.DEBUG) # Audio recorder
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
     wakeWord = WakeWord(config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.DEBUG) # Wake word detection
@@ -45,17 +45,16 @@ def main():
             )
             sd.wait()  # Wait until recording is finished
             
-            # Flatten to 1D array
-            raw = raw.flatten()
-                        
+            # Save audio for reference/debugging
+            audio.save_audio(raw, name="Raw.wav")
+            raw, sample_rate, time = audio.get_audio(name = "Raw.wav")
+
             # Apply filters
             filtered = filter.apply_filters(raw)
+            print("Filtered and normalized audio")
             
             # Normalize lightly to (-1,1)
             filtered = filter.normalize(filtered)
-
-            # Save audio for reference/debugging
-            audio.save_audio(raw, filtered)
 
             # Run STT and update token buffer
             whisper.transcribe(model, filtered)
