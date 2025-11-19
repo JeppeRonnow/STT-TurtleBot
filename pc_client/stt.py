@@ -1,11 +1,12 @@
-import numpy as np
-import whisper
-import time
+from openwakeword import Model
 from collections import deque
+from pathlib import Path
+import sounddevice as sd
+import numpy as np
 import threading
+import whisper
 import queue
-
-import sounddevice as sd # for simple wake
+import time
 
 class STT:
     model_name = ""
@@ -159,81 +160,105 @@ class STT:
         self.transcription = []
 
 
-    def test_wake_word(model_path: str = None, model_name: str = None,
-                       threshold: float = 0.6, cooldown_sec: float = 2.0,
-                       smooth_n: int = 5, rate: int = 16000, chunk_ms: int = 80):
-        """Simple test listener using openwakeword. Pass either a trained model name
-        (legacy) or a full path to an ONNX file via model_path. When model_path is
-        provided the function will use the ONNX inference framework and derive
-        the model key from the filename if model_name is not given.
-        """
-        # Lazy import to avoid requiring openwakeword at module import-time
-        from openwakeword import Model
-        from collections import deque
-        from pathlib import Path
+class WakeWord:
+    def __init__(self, MODEL_PATH: str, SAMPLE_RATE: float, BLOCK_SIZE: float, THRESHOLD: float, COOLDOWN: float, DEBUG: bool):
+        self.MODEL_PATH = MODEL_PATH
+        self.THRESHOLD = THRESHOLD
+        self.COOLDOWN = COOLDOWN
+        self.SAMPLE_RATE = SAMPLE_RATE
+        self.BLOCK_SIZE = BLOCK_SIZE
+        self.DEBUG = DEBUG
+        
+        self.last_detection = 0.0
 
-        # If a model file is provided, use ONNX and derive model name from filename
-        if model_path:
-            model_file = str(Path(model_path))
-            inferred_name = Path(model_file).stem
-            model_key = model_name or inferred_name
-            oww = Model(wakeword_models=[model_file], inference_framework="onnx")
-        else:
-            # Fallback to legacy name-based usage (keeps backward compatibility)
-            model_key = model_name or WAKEWORD_NAME
-            oww = Model(wakeword_models=[model_key], inference_framework="tflite")
+        if self.debug:
+            print(f"[WakeWord] Loading model from: {self.MODEL_PATH}")
 
-        recent_scores = deque(maxlen=smooth_n)
-        last_trigger = -1e9
+        self.wakeWord = Model(
+                wakeword_model_paths=[self.MODEL_PATH],
+                enable_speex_noise_suppression=True
+            )
 
-        def test_record():
-            print("record() called – implement your post-wake logic here.")
+        if self.debug:
+            print("[WakeWord] Model loaded successfully.")
 
-        CHUNK_SAMPLES = int(rate * chunk_ms / 1000.0)
+    def listen(self):
+        with sd.InputStream(
+                channels=1,
+                samplerate=self.SAMPLE_RATE,
+                blocksize=self.BLOCK_SIZE,
+                dtype="float32",
+                callback=self.callback,
+            ):
+            if self.CONFIG: print("Listening for wake word... Press Ctrl+C to stop.")
 
-        def callback(indata, frames, time_info, status):
-            nonlocal last_trigger
-            if status:
-                return
-            audio = (indata[:, 0] * 32767).astype(np.int16)
-            scores = oww.predict(audio)
-            score = scores.get(model_key, 0.0)
-            recent_scores.append(score)
-            smooth = float(np.mean(recent_scores)) if len(recent_scores) > 0 else 0.0
-            print(f"{model_key} prob (smoothed): {smooth:.3f}", end="\r")
-            if smooth >= threshold and (time.time() - last_trigger) >= cooldown_sec:
-                last_trigger = time.time()
-                print(f"\nWake word detected (score={smooth:.3f} ≥ {threshold:.3f})")
-                test_record()
+    def callback(self, indata, frames, time_info, status):
+        # Convert float32 [-1, 1] to int16 [-32768, 32767]
+        audio_int16 = (indata[:, 0] * 32767).astype(np.int16)
+        
+        # Get predictions
+        scores = wakeWord.predict(audio_int16)
 
-        print(f"Listening for wake word: {model_key}")
-        with sd.InputStream(channels=1, samplerate=rate, blocksize=CHUNK_SAMPLES, dtype="float32", callback=callback):
-            try:
-                while True:
-                    time.sleep(0.25)
-            except KeyboardInterrupt:
-                print("\nStopping...")
+        now = time.time()
+        for name, score in scores.items():
+            if self.CONFIG: print(f"Model: {name}, Score: {score:.6f}")
+            if score >= self.THRESHOLD:
+                if (now - last_detection) > self.COOLDOWN:
+                    last_detection = now
+                    if self.CONFIG: print("Wake word detected")
 
 
 if __name__ == "__main__":
-    from pathlib import Path
     import time
+    import numpy as np
+    import sounddevice as sd
+    from pathlib import Path
+    from openwakeword import Model
 
-    # Constants (kept for reference / backward compatibility)
-    THRESHOLD = 0.6
-    COOLDOWN_SEC = 2.0
-    SMOOTH_N = 5
-    RATE = 16000
-    CHUNK_MS = 80
-    CHUNK_SAMPLES = int(RATE * CHUNK_MS / 1000.0)
-    WAKEWORD_NAME = "Turtlebot"
+    SAMPLE_RATE = 16000
+    BLOCK_SIZE = 1280          # 80ms chunks (optimal for openWakeWord)
+    THRESHOLD = 0.002          # adjust per model
+    COOLDOWN = 2.0           # debounce detections
+    
+    last_detection = 0.0
 
-    # Use the ONNX model file located in the repository's wake_word folder.
-    # This resolves relative to the repo layout: pc_client/.. -> repo root
-    model_file = Path(__file__).parent.parent / "wake_word" / "turtlebot.onnx"
-    print(f"Using ONNX wake word model: {model_file}")
+    # Resolve model path using pathlib
+    parrent = Path(__file__).resolve().parents[1]
+    model_path = parrent / "wake_word/Turtlebot-2.onnx"
 
-    # Call the test helper with the model file path (uses ONNX inference)
-    stt = STT.test_wake_word(model_path=str(model_file), model_name=None,
-                             threshold=THRESHOLD, cooldown_sec=COOLDOWN_SEC,
-                             smooth_n=SMOOTH_N, rate=RATE, chunk_ms=CHUNK_MS)
+    print(f"Loading wake-word model: {model_path}")
+    wakeWord = Model(
+        wakeword_model_paths=[str(model_path)],
+        enable_speex_noise_suppression=True,
+    )
+
+    def callback(indata, frames, time_info, status):
+        global last_detection
+
+        # Convert float32 [-1, 1] to int16 [-32768, 32767]
+        audio_int16 = (indata[:, 0] * 32767).astype(np.int16)
+        
+        # Get predictions
+        scores = wakeWord.predict(audio_int16)
+
+        now = time.time()
+        for name, score in scores.items():
+            print(f"Model: {name}, Score: {score:.6f}")
+            if score >= THRESHOLD:
+                if (now - last_detection) > COOLDOWN:
+                    last_detection = now
+                    print("Wake word detected")
+
+    with sd.InputStream(
+            channels=1,
+            samplerate=SAMPLE_RATE,
+            blocksize=BLOCK_SIZE,
+            dtype="float32",
+            callback=callback,
+        ):
+        print("Listening for wake word... Press Ctrl+C to stop.")
+        try:
+            while True:
+                time.sleep(0.1)
+        except KeyboardInterrupt:
+            pass
