@@ -29,6 +29,7 @@ class STT:
         self.DEBUG = DEBUG
         if self.DEBUG: print(f"[STT class initialized]")
 
+
     # Load whisper model
     def load_model(self):
         if self.DEBUG: print("Loading Whisper model ...")
@@ -132,10 +133,9 @@ class STT:
         print("\n[Current transcription]:", " ".join(self.transcription))
 
 
-    def strip_transcription(self, x: int):
-        if x <= 0:
-            return
-        del self.transcription[:x]
+    def strip_transcription(self) -> None:
+        # Clear entire transcription
+        del self.transcription[:]
 
 
     def clean_word(self, word: str) -> str:
@@ -161,28 +161,47 @@ class STT:
 
 
 class WakeWord:
-    def __init__(self, MODEL_PATH: str, SAMPLE_RATE: float, BLOCK_SIZE: float, THRESHOLD: float, COOLDOWN: float, DEBUG: bool):
+    def __init__(self, MODEL_PATH: str, SAMPLE_RATE: float, BLOCK_SIZE: float, THRESHOLD: float, DEBUG: bool):
         self.MODEL_PATH = MODEL_PATH
         self.THRESHOLD = THRESHOLD
-        self.COOLDOWN = COOLDOWN
         self.SAMPLE_RATE = SAMPLE_RATE
         self.BLOCK_SIZE = BLOCK_SIZE
         self.DEBUG = DEBUG
         
-        self.last_detection = 0.0
+        self.wake_word_detected = False
 
-        if self.debug:
-            print(f"[WakeWord] Loading model from: {self.MODEL_PATH}")
+        if self.DEBUG:
+            print(f"[WakeWord] Loading model from: {str(self.MODEL_PATH)}")
 
+        parrent = Path(__file__).resolve().parents[1]
+        path = parrent / self.MODEL_PATH
         self.wakeWord = Model(
-                wakeword_model_paths=[self.MODEL_PATH],
+                wakeword_model_paths=[str(path)],
                 enable_speex_noise_suppression=True
             )
 
-        if self.debug:
+        if self.DEBUG:
             print("[WakeWord] Model loaded successfully.")
 
-    def listen(self):
+
+    def callback(self, indata, frames, time_info, status):
+        # Convert float32 [-1, 1] to int16 [-32768, 32767]
+        audio_int16 = (indata[:, 0] * 32767).astype(np.int16)
+        
+        # Get predictions
+        scores = self.wakeWord.predict(audio_int16)
+
+        for name, score in scores.items():
+            if self.DEBUG: print(f"Model: {name}, Score: {score:.6f}")
+            if score >= self.THRESHOLD and not self.wake_word_detected:
+                self.wake_word_detected = True
+                if self.DEBUG: print("Wake word detected")
+                break
+
+
+    def await_wake_word(self) -> None:
+        self.wake_word_detected = False
+
         with sd.InputStream(
                 channels=1,
                 samplerate=self.SAMPLE_RATE,
@@ -190,22 +209,10 @@ class WakeWord:
                 dtype="float32",
                 callback=self.callback,
             ):
-            if self.CONFIG: print("Listening for wake word... Press Ctrl+C to stop.")
+            if self.DEBUG: print("Listening for wake word... Press Ctrl+C to stop.")
 
-    def callback(self, indata, frames, time_info, status):
-        # Convert float32 [-1, 1] to int16 [-32768, 32767]
-        audio_int16 = (indata[:, 0] * 32767).astype(np.int16)
-        
-        # Get predictions
-        scores = wakeWord.predict(audio_int16)
-
-        now = time.time()
-        for name, score in scores.items():
-            if self.CONFIG: print(f"Model: {name}, Score: {score:.6f}")
-            if score >= self.THRESHOLD:
-                if (now - last_detection) > self.COOLDOWN:
-                    last_detection = now
-                    if self.CONFIG: print("Wake word detected")
+            while not self.wake_word_detected:
+                time.sleep(0.1)
 
 
 if __name__ == "__main__":
