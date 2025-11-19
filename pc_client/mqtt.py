@@ -5,7 +5,7 @@ import json
 
 class MQTT_Transmitter:
     # Define MQTT connection details
-    MQTT_SERVER = ""   # Replace with MQTT server address
+    MQTT_SERVER = "10.232.34.254"   # Replace with MQTT server address
     MQTT_PORT = 1883      # Replace with MQTT port
     MQTT_TOPIC = "mqtt_vel"    # Replace with MQTT topic
 
