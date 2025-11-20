@@ -1,4 +1,4 @@
-from scipy.signal import butter, lfilter
+from scipy.signal import butter, filtfilt
 import numpy as np
 
 
@@ -39,7 +39,7 @@ class DSP:
 
     # Apply bandpass filter to adio
     def apply_filters(self, audio):
-        return lfilter(self.n, self.d, audio)
+        return filtfilt(self.n, self.d, audio)
 
 
     # Normalize audio
