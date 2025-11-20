@@ -1,4 +1,5 @@
 from pathlib import Path
+import sounddevice as sd
 import soundfile as sf
 import numpy as np
 
@@ -12,6 +13,20 @@ class Record:
         self.DEBUG = DEBUG
         if self.DEBUG: print(f"[Record class initialized]")
 
+
+    # Record audio from microphone
+    def record_audio(self, duration, device) -> np.ndarray:
+        if self.DEBUG: print(f"Recording {duration}s of audio...")
+        audio = sd.rec(
+            int(duration * self.SAMPLE_RATE),
+            samplerate=self.SAMPLE_RATE,
+            channels=1,
+            dtype='float32',
+            device=device
+        )
+        sd.wait()
+        return audio.flatten()
+    
     
     # Record audio and save
     def save_audio(self, audio, name):
@@ -28,4 +43,4 @@ class Record:
         if audio.ndim > 1:
             audio = audio[:, 0]
         time = np.arange(audio.shape[0]) / sample_rate
-        return audio, sample_rate, time
+        return audio, time

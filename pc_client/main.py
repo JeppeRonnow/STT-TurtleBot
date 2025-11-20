@@ -1,9 +1,3 @@
-from move_timer import Move_Timer
-import sounddevice as sd
-import numpy as np
-import queue
-import time
-
 from mqtt import MQTT_Transmitter
 from move_timer import Move_Timer
 from config import Config
@@ -34,30 +28,20 @@ def main():
             # Wait for wake word
             wakeWord.await_wake_word()
         
-            # Record a single chunk of audio
-            if config.DEBUG: print(f"Recording {config.CHUNK_SECONDS}s of audio...")
-            raw = sd.rec(
-                int(config.CHUNK_SECONDS * config.SAMPLE_RATE),
-                samplerate=config.SAMPLE_RATE,
-                channels=1,
-                dtype='float32',
-                device=config.AUDIO_DEVICE
-            )
-            sd.wait()  # Wait until recording is finished
-            
-            # Save audio for reference/debugging
-            audio.save_audio(raw, name="Raw.wav")
-            raw, sample_rate, time = audio.get_audio(name = "Raw.wav")
+            # Record audio and save
+            raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)  # Wait until recording is finished
+            audio.save_audio(raw, "Raw.wav")
 
-            # Apply filters
+            # Apply filters and save
             filtered = filter.apply_filters(raw)
-            print("Filtered and normalized audio")
+            audio.save_audio(filtered, "Filtered.wav")
             
             # Normalize lightly to (-1,1)
-            filtered = filter.normalize(filtered)
+            normalized = filter.normalize(filtered)
+            audio.save_audio(normalized, "Normalized.wav")
 
             # Run STT and update token buffer
-            whisper.transcribe(model, filtered)
+            whisper.transcribe(model, normalized)
 
             # Handle commands from tokens
             while True:
