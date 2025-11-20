@@ -24,7 +24,7 @@ class Record:
             dtype='float32',
             device=device
         )
-        sd.wait()
+        sd.wait() # Wait until recording is finished
         return audio.flatten()
     
     

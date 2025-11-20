@@ -27,9 +27,10 @@ def main():
         try:
             # Wait for wake word
             wakeWord.await_wake_word()
+            continue
         
             # Record audio and save
-            raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)  # Wait until recording is finished
+            raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)  
             audio.save_audio(raw, "Raw.wav")
 
             # Apply filters and save
@@ -50,14 +51,13 @@ def main():
                 
                 # Get current words
                 words = whisper.get_transcription()
+                whisper.strip_transcription()
                 payload = logic.handle_transcription(words)
                 if payload:
                     if config.DEBUG: print("[Payload]:", payload)
                     velocities = logic.payload_to_velocities(payload)
-                    mqtt.publish_command(velocities[0], velocities[1])
-                    whisper.strip_transcription()
+                    mqtt.publish_command(velocities[0], velocities[1])                    
                 else: 
-                    whisper.strip_transcription()
                     break                    
 
         except KeyboardInterrupt:

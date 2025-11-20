@@ -1,5 +1,4 @@
 from openwakeword import Model
-from collections import deque
 from pathlib import Path
 import sounddevice as sd
 import numpy as np
@@ -26,14 +25,14 @@ class STT:
 
 
     # Load whisper model
-    def load_model(self):
+    def load_model(self) -> object:
         if self.DEBUG: print("Loading Whisper model ...")
         model = whisper.load_model(self.model_name, device=self.model_device)
         if self.DEBUG: print("Model loaded. Starting stream. Press Ctrl+C to stop.")
         return model
 
 
-    def transcribe(self, model, audio):
+    def transcribe(self, model, audio) -> None:
         try:
             audio = audio.astype(np.float32, copy=False)
             result = model.transcribe(audio, fp16=False, language='en', verbose=None, no_speech_threshold=0.5)
@@ -56,12 +55,12 @@ class STT:
             del self.transcription[:-self.max_buffer_length]
 
 
-    def get_transcription(self):
+    def get_transcription(self) -> list:
         # return a shallow copy to avoid race with strip
         return list(self.transcription)
 
 
-    def print_transcription(self):
+    def print_transcription(self) -> None:
         print("\n[Current transcription]:", " ".join(self.transcription))
 
 
@@ -82,9 +81,11 @@ class WakeWord:
         self.THRESHOLD = THRESHOLD
         self.SAMPLE_RATE = SAMPLE_RATE
         self.BLOCK_SIZE = BLOCK_SIZE
+        self.COOLDOWN = 2.0  # seconds
         self.DEBUG = DEBUG
         
-        self.wake_word_detected = False
+        self.last_detection = 0.0
+        self.event = threading.Event()  
 
         if self.DEBUG:
             print(f"[WakeWord] Loading model from: {str(self.MODEL_PATH)}")
@@ -100,9 +101,9 @@ class WakeWord:
             print("[WakeWord] Model loaded successfully.")
 
 
-    def callback(self, indata, frames, time_info, status):
-        # Exit if already detected
-        if self.wake_word_detected:
+    def callback(self, indata, frames, time_info, status) -> None:
+        # Thread-safe exit check
+        if self.event.is_set():
             return
     
         # Convert float32 [-1, 1] to int16 [-32768, 32767]
@@ -111,17 +112,18 @@ class WakeWord:
         # Get predictions
         scores = self.wakeWord.predict(audio_int16)
 
-        # Check for match
+        # Check for match with cooldown
+        now = time.time()
         for name, score in scores.items():
             if self.DEBUG: print(f"Model: {name}, Score: {score:.6f}")
-            if score >= self.THRESHOLD and not self.wake_word_detected:
-                self.wake_word_detected = True
+            if score >= self.THRESHOLD and (now - self.last_detection) > self.COOLDOWN:
+                self.event.set()
+                self.last_detection = now
                 if self.DEBUG: print("Wake word detected")
-                break
 
 
     def await_wake_word(self) -> None:
-        self.wake_word_detected = False
+        self.event.clear()
 
         with sd.InputStream(
                 channels=1,
@@ -132,8 +134,7 @@ class WakeWord:
             ):
             if self.DEBUG: print("Listening for wake word... Press Ctrl+C to stop.")
 
-            while not self.wake_word_detected:
-                time.sleep(0.1)
+            self.event.wait() # Wait until wake word is detected
 
 
 if __name__ == "__main__":
