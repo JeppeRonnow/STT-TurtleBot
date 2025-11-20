@@ -18,7 +18,7 @@ class DSP:
 
         self.n, self.d =self.create_filter() # Create the filter
 
-        if self.DEBUG: print("DSP calss initalized")
+        if self.DEBUG: print("[DSP class initalized]")
 
 
     # Create filter
@@ -27,13 +27,6 @@ class DSP:
         low_cut = self.low_cut_hz / nquist
         high_cut = self.high_cut_hz / nquist
         n, d = butter(self.order, [low_cut, high_cut], btype='bandpass')
-
-        if self.DEBUG:
-            n = "[" + " ".join(f"{x:.16g}" for x in filter.n) + "]"
-            d = "[" + " ".join(f"{x:.16g}" for x in filter.d) + "]"
-            print("n = " + n + ";")
-            print("d = " + d + ";")
-
         return n, d
 
 
@@ -53,60 +46,24 @@ class DSP:
 
 
 if __name__ == '__main__':
+    from record import Record
+    from plot import Plot
+
     fs = 16000
-    lp = 120
-    hp = 5000
+    lp = 120.0
+    hp = 5000.0
     order = 4
 
     filter = DSP(fs, lp, hp, order, False)
 
-    n = "[" + " ".join(f"{x:.16g}" for x in filter.n) + "]"
-    d = "[" + " ".join(f"{x:.16g}" for x in filter.d) + "]"
-
-    print("n = " + n + ";")
-    print("d = " + d + ";")
-
-    # Plot raw, filtered and normalized file.
-    import soundfile as sf
-    import matplotlib.pyplot as plt
-
     # Read audio file
+    record = Record(fs, False)
     file_name = "Raw.wav"
-    audio, sample_rate = sf.read(file_name, dtype='float32')
-
-    # Handle if audio file is not mono
-    if audio.ndim > 1:
-        audio = audio[:, 0]
-
-    # Create time axis
-    time = np.arange(audio.shape[0]) / sample_rate
+    audio, time = record.get_audio(file_name)
 
     # Filter and normalize audio
     audio_filter = filter.apply_filters(audio)
     audio_norm = filter.normalize(audio_filter)
 
-    # Plot audio
-    plt.figure(figsize=(10,4))
-    plt.plot(time, audio, color='blue')
-    plt.xlabel("Time [s]")
-    plt.ylabel("Amplitude")
-    plt.title("Waveform of " + file_name)
-    plt.grid(True)
-    plt.tight_layout()
-
-    plt.figure(figsize=(10,4))
-    plt.plot(time, audio_filter, color='blue')
-    plt.xlabel("Time [s]")
-    plt.ylabel("Amplitude")
-    plt.title("Waveform of filtered audio")
-    plt.grid(True)
-    plt.tight_layout()
-
-    plt.figure(figsize=(10,4))
-    plt.plot(time, audio_norm, color='blue')
-    plt.xlabel("Time [s]")
-    plt.ylabel("Amplitude")
-    plt.title("Waveform of normalized audio")
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    # Plot results
+    Plot.plot_audio(file_name, audio, audio_filter, audio_norm, time)

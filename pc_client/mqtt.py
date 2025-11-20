@@ -1,13 +1,14 @@
 import paho.mqtt.client as mqtt
 from time import sleep
 import json
+import sys
 
 
 class MQTT_Transmitter:
     # Define MQTT connection details
     MQTT_SERVER = "10.232.34.254"   # Replace with MQTT server address
-    MQTT_PORT = 1883      # Replace with MQTT port
-    MQTT_TOPIC = "mqtt_vel"    # Replace with MQTT topic
+    MQTT_PORT = 1883                # Replace with MQTT port
+    MQTT_TOPIC = "mqtt_vel"         # Replace with MQTT topic
 
 
     # Class init and mqtt init
@@ -15,16 +16,27 @@ class MQTT_Transmitter:
         self.MQTT_SERVER = server
         self.DEBUG = DEBUG
 
-        if self.DEBUG: print(f"\nConnecting to MQTT broker at {self.MQTT_SERVER}:{self.MQTT_PORT}...")
-
-        # Init MQTT client
-        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        self.client.on_connect = self.on_connect
-        self.client.connect(self.MQTT_SERVER, self.MQTT_PORT, 60)
-        self.client.loop_start()
+        # Connect to MQTT server
+        self.connect()
         if self.DEBUG: print(f"[MQTT class initialized]")
-
         sleep(1)
+
+
+    # Connect to mqtt server
+    def connect(self) -> None:
+        try:
+            if self.DEBUG: print(f"\nConnecting to MQTT broker at {self.MQTT_SERVER}:{self.MQTT_PORT}...")
+            self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+            self.client.on_connect = self.on_connect
+            self.client.connect(self.MQTT_SERVER, self.MQTT_PORT, 60)
+            self.client.loop_start()
+        except Exception as e:
+            print(f"Failed to connect to MQTT broker: {e}")
+            if self.DEBUG: 
+                print("Initializing MQTT dummy client...")
+                self.client = mqtt.Client()  # Dummy client
+            else:
+                sys.exit(1)
 
 
     # Callback for when client receives a CONNACK response from server

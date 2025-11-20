@@ -9,6 +9,7 @@ AUDIO:
   CHUNK_SECONDS: 3
   BUFFER_SECONDS: 2 # Depricated, not used
   AUDIO_DEVICE: null
+  FILTER_ORDER: 4
 
 WHISPER:
   MODEL_NAME: "tiny.en"

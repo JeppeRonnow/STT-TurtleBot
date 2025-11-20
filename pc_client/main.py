@@ -1,9 +1,3 @@
-from move_timer import Move_Timer
-import sounddevice as sd
-import numpy as np
-import queue
-import time
-
 from mqtt import MQTT_Transmitter
 from move_timer import Move_Timer
 from config import Config
@@ -21,7 +15,7 @@ def main():
     mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG) # MQTT_Transmitter
     move_timer = Move_Timer(mqtt, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
     logic = Logic(move_timer, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG) # Logic control
-    filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.DEBUG) # Bandpass filter
+    filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.FILTER_ORDER, config.DEBUG) # Bandpass filter
     audio = Record(config.SAMPLE_RATE, config.DEBUG) # Audio recorder
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
     wakeWord = WakeWord(config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.DEBUG) # Wake word detection
@@ -34,31 +28,20 @@ def main():
             # Wait for wake word
             wakeWord.await_wake_word()
         
-            # Record a single chunk of audio
-            if config.DEBUG: print(f"Recording {config.CHUNK_SECONDS}s of audio...")
-            raw = sd.rec(
-                int(config.CHUNK_SECONDS * config.SAMPLE_RATE),
-                samplerate=config.SAMPLE_RATE,
-                channels=1,
-                dtype='float32',
-                device=config.AUDIO_DEVICE
-            )
-            sd.wait()  # Wait until recording is finished
-            
-            # Flatten to 1D array
-            raw = raw.flatten()
-                        
-            # Apply filters
+            # Record audio and save
+            raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)  # Wait until recording is finished
+            audio.save_audio(raw, "Raw.wav")
+
+            # Apply filters and save
             filtered = filter.apply_filters(raw)
+            audio.save_audio(filtered, "Filtered.wav")
             
             # Normalize lightly to (-1,1)
-            filtered = filter.normalize(filtered)
-
-            # Save audio for reference/debugging
-            audio.save_audio(raw, filtered)
+            normalized = filter.normalize(filtered)
+            audio.save_audio(normalized, "Normalized.wav")
 
             # Run STT and update token buffer
-            whisper.transcribe(model, filtered)
+            whisper.transcribe(model, normalized)
 
             # Handle commands from tokens
             while True:
