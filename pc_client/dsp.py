@@ -18,7 +18,7 @@ class DSP:
 
         self.n, self.d =self.create_filter() # Create the filter
 
-        if self.DEBUG: print("DSP calss initalized")
+        if self.DEBUG: print("[DSP class initalized]")
 
 
     # Create filter
