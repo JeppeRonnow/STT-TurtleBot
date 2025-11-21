@@ -21,11 +21,23 @@
 # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
-from ctypes import CDLL, CFUNCTYPE, POINTER, c_int, c_uint, pointer, c_ubyte, c_uint8, c_uint32, c_uint16
-from smbus2 import SMBus, i2c_msg
+import glob
 import os
 import site
-import glob
+from ctypes import (
+    CDLL,
+    CFUNCTYPE,
+    POINTER,
+    c_int,
+    c_ubyte,
+    c_uint,
+    c_uint8,
+    c_uint16,
+    c_uint32,
+    pointer,
+)
+
+from smbus2 import SMBus, i2c_msg
 
 
 class VL53L1xError(RuntimeError):
@@ -77,11 +89,12 @@ for lib_location in _POSSIBLE_LIBRARY_LOCATIONS:
             # print(lib_location + "/vl51l1x_python.so not found")
             pass
 else:
-    raise OSError('Could not find vl53l1x_python.so')
+    raise OSError("Could not find vl53l1x_python.so")
 
 
 class VL53L1X:
     """VL53L1X ToF."""
+
     def __init__(self, i2c_bus=1, i2c_address=0x29, tca9548a_num=255, tca9548a_addr=0):
         """Initialize the VL53L1X ToF Sensor from ST"""
         self._i2c_bus = i2c_bus
@@ -95,22 +108,30 @@ class VL53L1X:
                 self._i2c.open(bus=self._i2c_bus)
                 self._i2c.read_byte_data(self.i2c_address, 0x00)
             except IOError:
-                raise RuntimeError("VL53L1X not found on adddress: {:02x}".format(self.i2c_address))
+                raise RuntimeError(
+                    "VL53L1X not found on adddress: {:02x}".format(self.i2c_address)
+                )
             finally:
                 self._i2c.close()
 
         self._dev = None
         # Register Address
         self.ADDR_UNIT_ID_HIGH = 0x16  # Serial number high byte
-        self.ADDR_UNIT_ID_LOW = 0x17   # Serial number low byte
-        self.ADDR_I2C_ID_HIGH = 0x18   # Write serial number high byte for I2C address unlock
-        self.ADDR_I2C_ID_LOW = 0x19    # Write serial number low byte for I2C address unlock
-        self.ADDR_I2C_SEC_ADDR = 0x8a  # Write new I2C address after unlock
+        self.ADDR_UNIT_ID_LOW = 0x17  # Serial number low byte
+        self.ADDR_I2C_ID_HIGH = (
+            0x18  # Write serial number high byte for I2C address unlock
+        )
+        self.ADDR_I2C_ID_LOW = (
+            0x19  # Write serial number low byte for I2C address unlock
+        )
+        self.ADDR_I2C_SEC_ADDR = 0x8A  # Write new I2C address after unlock
 
     def open(self, reset=False):
         self._i2c.open(bus=self._i2c_bus)
         self._configure_i2c_library_functions()
-        self._dev = _TOF_LIBRARY.initialise(self.i2c_address, self._tca9548a_num, self._tca9548a_addr, reset)
+        self._dev = _TOF_LIBRARY.initialise(
+            self.i2c_address, self._tca9548a_num, self._tca9548a_addr, reset
+        )
 
     def close(self):
         self._i2c.close()
@@ -121,7 +142,7 @@ class VL53L1X:
         def _i2c_read(address, reg, data_p, length):
             ret_val = 0
 
-            msg_w = i2c_msg.write(address, [reg >> 8, reg & 0xff])
+            msg_w = i2c_msg.write(address, [reg >> 8, reg & 0xFF])
             msg_r = i2c_msg.read(address, length)
 
             self._i2c.i2c_rdwr(msg_w, msg_r)
@@ -140,7 +161,7 @@ class VL53L1X:
             for index in range(length):
                 data.append(data_p[index])
 
-            msg_w = i2c_msg.write(address, [reg >> 8, reg & 0xff] + data)
+            msg_w = i2c_msg.write(address, [reg >> 8, reg & 0xFF] + data)
 
             self._i2c.i2c_rdwr(msg_w)
 
@@ -159,17 +180,21 @@ class VL53L1X:
         self._i2c_multi_func = _I2C_MULTI_FUNC(_i2c_multi)
         self._i2c_read_func = _I2C_READ_FUNC(_i2c_read)
         self._i2c_write_func = _I2C_WRITE_FUNC(_i2c_write)
-        _TOF_LIBRARY.VL53L1_set_i2c(self._i2c_multi_func, self._i2c_read_func, self._i2c_write_func)
+        _TOF_LIBRARY.VL53L1_set_i2c(
+            self._i2c_multi_func, self._i2c_read_func, self._i2c_write_func
+        )
 
     # The ROI is a square or rectangle defined by two corners: top left and bottom right.
     # Default ROI is 16x16 (indices 0-15). The minimum ROI size is 4x4.
     def set_user_roi(self, user_roi):
         """Set Region Of Interest (ROI)"""
-        _TOF_LIBRARY.setUserRoi(self._dev,
-                                user_roi.top_left_x,
-                                user_roi.top_left_y,
-                                user_roi.bot_right_x,
-                                user_roi.bot_right_y)
+        _TOF_LIBRARY.setUserRoi(
+            self._dev,
+            user_roi.top_left_x,
+            user_roi.top_left_y,
+            user_roi.bot_right_x,
+            user_roi.bot_right_y,
+        )
 
     def start_ranging(self, mode=VL53L1xDistanceMode.LONG):
         """Start VL53L1X ToF Sensor Ranging"""
@@ -223,7 +248,9 @@ class VL53L1X:
     def get_timing(self):
         budget = c_uint(0)
         budget_p = pointer(budget)
-        status = _TOF_LIBRARY.VL53L1_GetMeasurementTimingBudgetMicroSeconds(self._dev, budget_p)
+        status = _TOF_LIBRARY.VL53L1_GetMeasurementTimingBudgetMicroSeconds(
+            self._dev, budget_p
+        )
         if status == 0:
             return budget.value + 1000
         else:
@@ -236,3 +263,6 @@ class VL53L1X:
         else:
             raise RuntimeError("change_address failed with code: {}".format(status))
         return True
+
+    def get_distance_matrix(self):
+        _TOF_LIBRARY.getDistanceMatrix.restype = POINTER(c_uint16 * 64)

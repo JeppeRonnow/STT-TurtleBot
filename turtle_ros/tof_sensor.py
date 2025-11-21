@@ -198,6 +198,9 @@ class ToFSensor:
         except Exception:
             pass
 
+    def cliff_detection(self):
+        pass
+
 
 if __name__ == "__main__":
     sensor = ToFSensor()
