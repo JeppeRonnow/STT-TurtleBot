@@ -29,16 +29,23 @@ class ToFSensor:
         self._tofs = {"front": None, "rear": None}
         self._lock = threading.RLock()
 
+        # Streaming attributes
+        self._stream_thread = None  # initialize stream attributes
+        self._stream_stop = None
+
+    #
     def _enable(self, which):
         GPIO.output(self._pins["front"], GPIO.LOW)
         GPIO.output(self._pins["rear"], GPIO.LOW)
         GPIO.output(self._pins[which], GPIO.HIGH)
         time.sleep(self.boot_delay)
 
+    #
     def _disable_both(self):
         GPIO.output(self._pins["front"], GPIO.LOW)
         GPIO.output(self._pins["rear"], GPIO.LOW)
 
+    #
     def init_sensor(self, which, range_mode=1):
         """
         Initialize and start ranging for `which` sensor if not already initialized.
@@ -60,6 +67,7 @@ class ToFSensor:
             self._tofs[which] = tof
             # leave the sensor powered so it can be reused repeatedly
 
+    #
     def close_sensor(self, which):
         """Stop ranging and close the `which` sensor if it is open."""
         if which not in ("front", "rear"):
@@ -78,6 +86,7 @@ class ToFSensor:
             # make sure pins are disabled
             self._disable_both()
 
+    #
     def stream(self, which, interval=0.05, range_mode=1, callback=None):
         """
         Blocking continuous stream. Initializes (if needed) and repeatedly reads
@@ -146,6 +155,7 @@ class ToFSensor:
             # use wait so we can stop promptly
             stop_event.wait(interval)
 
+    #
     def start_stream(self, which, interval=0.05, range_mode=1, callback=None):
         """
         Start a non-blocking background streaming thread. Only one stream per instance
@@ -158,6 +168,12 @@ class ToFSensor:
             raise RuntimeError(
                 "Stream already running. Stop it before starting a new one."
             )
+
+        # Save stream parameters so we can reuse them when switching sensors
+        self._stream_which = which
+        self._stream_interval = float(interval)
+        self._stream_range_mode = int(range_mode)
+        self._stream_callback = callback
 
         stop_event = threading.Event()
         thread = threading.Thread(
@@ -177,7 +193,67 @@ class ToFSensor:
             self._stream_thread.join(timeout=timeout)
         self._stream_thread = None
         self._stream_stop = None
+        self._stream_which = None
+        self._stream_interval = None
+        self._stream_range_mode = None
+        self._stream_callback = None
 
+    #
+    def switch_sensor(self, which):
+        """
+        Switch the currently-running sensor to `which`.
+        - If a background stream is running, it will be stopped and restarted on `which`
+        with the same parameters (interval, range_mode, callback).
+        - If no stream is running, this will initialize `which` (and close the other sensor).
+        """
+        if which not in ("front", "rear"):
+            raise ValueError("which must be 'front' or 'rear'")
+
+        other = "rear" if which == "front" else "front"
+
+        # If requested sensor already open and streaming, nothing to do
+        if (
+            self._stream_thread
+            and self._stream_thread.is_alive()
+            and self._stream_which == which
+        ):
+            return
+
+        # Save current stream params (if any)
+        current_interval = self._stream_interval
+        current_range_mode = self._stream_range_mode
+        current_callback = self._stream_callback
+        was_streaming = bool(self._stream_thread and self._stream_thread.is_alive())
+
+        # Stop current stream (if any)
+        if was_streaming:
+            self.stop_stream()
+
+        # Close the other sensor to ensure only `which` is enabled (and to avoid I2C address conflict)
+        try:
+            self.close_sensor(other)
+        except Exception:
+            pass
+
+        # Initialize requested sensor (so it's ready)
+        try:
+            # prefer explicit range_mode if provided earlier; otherwise default to 1
+            self.init_sensor(which, range_mode=current_range_mode or 1)
+        except Exception:
+            # if init fails, leave state consistent and return
+            return
+
+        # If we were streaming before, restart streaming on the requested sensor with same params
+        if was_streaming:
+            interval = current_interval if current_interval is not None else 0.05
+            range_mode = current_range_mode if current_range_mode is not None else 1
+            callback = current_callback
+            # start_stream will set _stream_which etc.
+            self.start_stream(
+                which, interval=interval, range_mode=range_mode, callback=callback
+            )
+
+    #
     def cleanup(self):
         """Close any open sensors, disable pins, and clean up GPIO."""
         try:
@@ -204,8 +280,15 @@ class ToFSensor:
 
 if __name__ == "__main__":
     sensor = ToFSensor()
-
     try:
-        sensor.stream("front", interval=0.3)
+        while True:
+            sensor.stream("front", interval=0.3)
+            time.sleep(1)
+            sensor.stop_stream()
+            time.sleep(1)
+            sensor.stream("rear", interval=0.3)
+            time.sleep(1)
+            sensor.stop_stream()
+            time.sleep(1)
     finally:
         sensor.cleanup()
