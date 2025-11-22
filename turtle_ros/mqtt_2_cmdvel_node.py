@@ -1,11 +1,11 @@
-import rclpy
-from rclpy.node import Node
-from geometry_msgs.msg import TwistStamped
-import paho.mqtt.client as mqtt
 import json
 import threading
 
-from  mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
+import paho.mqtt.client as mqtt
+import rclpy
+from geometry_msgs.msg import TwistStamped
+from mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
+from rclpy.node import Node
 
 BURGER_MAX_LIN_VEL = 0.22
 BURGER_MAX_ANG_VEL = 2.84
@@ -35,10 +35,10 @@ def check_angular_limit_velocity(velocity):
 
 class MqttToCmdVelNode(Node):
     def __init__(self):
-        super().__init__('mqtt_to_cmd_vel')
+        super().__init__("mqtt_to_cmd_vel")
 
         # Create a ROS2 publisher to publish on the cmd_vel topic
-        self.publisher = self.create_publisher(TwistStamped, 'cmd_vel', 10)
+        self.publisher = self.create_publisher(TwistStamped, "cmd_vel", 10)
 
         # MQTT client setup
         self.mqtt_client = mqtt.Client()
@@ -63,14 +63,14 @@ class MqttToCmdVelNode(Node):
 
         self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock())
 
-
     # When connecting to MQTT broker
     def on_connect(self, client, userdata, falgs, rc):
         if rc == 0:
             self.get_logger().info("Connect to MQTT broker succesfully")
         else:
-            self.get_logger().error("Failed to connect to MQTT broker, return code: %d", rc)
-
+            self.get_logger().error(
+                "Failed to connect to MQTT broker, return code: %d", rc
+            )
 
     # When message is received
     def on_message(self, client, userdata, msg):
@@ -79,35 +79,42 @@ class MqttToCmdVelNode(Node):
             payload = json.loads(msg.payload.decode())
 
             # Check if comand is return
-            if (payload['linear']['x'] == 69.69 and payload['angular']['z'] == 69.69):
+            if payload["linear"]["x"] == 69.69 and payload["angular"]["z"] == 69.69:
                 self.Pos_tracker.save_step(self.create_twist_msg(0.0, 0.0))
 
-                if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
+                if (
+                    self.Pos_tracker.return_thread
+                    and self.Pos_tracker.return_thread.is_alive()
+                ):
                     return
 
                 self.Pos_tracker.return_thread = threading.Thread(
                     target=self.Pos_tracker.return_to_start,
                     args=(self.publisher,),
-                    daemon=True
+                    daemon=True,
                 )
                 self.Pos_tracker.return_thread.start()
 
                 return
 
             # Check if meassage fit within constraints
-            linear_vel = check_linear_limit_velocity(payload['linear']['x'])
-            angular_vel = check_angular_limit_velocity(payload['angular']['z'])
+            linear_vel = check_linear_limit_velocity(payload["linear"]["x"])
+            angular_vel = check_angular_limit_velocity(payload["angular"]["z"])
 
-            if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
+            if (
+                self.Pos_tracker.return_thread
+                and self.Pos_tracker.return_thread.is_alive()
+            ):
                 self.Pos_tracker.return_stop_flag.set()
-
 
             # Create a Twist message
             twist_msg = self.create_twist_msg(linear_vel, angular_vel)
 
             # Publish to cmd_vel topic
             self.publisher.publish(twist_msg)
-            self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
+            self.get_logger().info(
+                f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}"
+            )
 
             self.Pos_tracker.save_step(twist_msg)
 
@@ -115,7 +122,6 @@ class MqttToCmdVelNode(Node):
             self.get_logger().error("Failed to decode JSON from MQTT message.")
         except KeyError as e:
             self.get_logger().error(f"Missing except key in MQTT message: {e}")
-
 
     # Create twist message
     def create_twist_msg(self, linear_vel, angular_vel):
@@ -139,5 +145,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

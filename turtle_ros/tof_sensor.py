@@ -32,6 +32,10 @@ class ToFSensor:
         # Streaming attributes
         self._stream_thread = None  # initialize stream attributes
         self._stream_stop = None
+        self._stream_which = None
+        self._stream_interval = None
+        self._stream_range_mode = None
+        self._stream_callback = None
 
     #
     def _enable(self, which):
@@ -278,6 +282,7 @@ class ToFSensor:
         pass
 
 
+"""
 if __name__ == "__main__":
     sensor = ToFSensor()
     try:
@@ -292,3 +297,4 @@ if __name__ == "__main__":
             time.sleep(1)
     finally:
         sensor.cleanup()
+"""
