@@ -37,8 +37,15 @@ Run `sudo arp-scan -l` to see the IP of the TurtleBot and run
 ```bash
 ssh pi@<TurtleBot IP>
 ```
-If new code added to turtlebot run the following to rebuild
+Adding new code to turtlebot
+
+On PC
+```bash
+rsync -avz <Git Repo>/turtle_ros/ pi@<Turtle IP>:/home/pi/rb3_ws/src/mqtt_2_cmd_pkg/mqtt_2_cmd_pkg/
 ```
+
+On Turtlebot run the following to build ros with the new files
+```bash
 cd ~/rb3_ws
 colcon build --packages-select mqtt_2_cmd_pkg
 source install/setup.bash

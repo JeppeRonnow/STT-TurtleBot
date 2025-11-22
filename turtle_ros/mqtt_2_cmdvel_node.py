@@ -30,7 +30,7 @@ def check_linear_limit_velocity(velocity):
 
 # Constrain angular velocity
 def check_angular_limit_velocity(velocity):
-    return constrain(velocity, -BURGER_MAX_ANG_VEL, BURGER_MAX_LIN_VEL)
+    return constrain(velocity, -BURGER_MAX_ANG_VEL, BURGER_MAX_ANG_VEL)
 
 
 class MqttToCmdVelNode(Node):
@@ -61,7 +61,7 @@ class MqttToCmdVelNode(Node):
 
         self.get_logger().info(f"Subscribed to MQTT topic: {mqtt_topic}")
 
-        self.Pos_tracker = Pos_tracker()
+        self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock())
 
 
     # When connecting to MQTT broker
