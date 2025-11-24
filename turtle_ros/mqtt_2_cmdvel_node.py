@@ -5,6 +5,7 @@ import paho.mqtt.client as mqtt
 import rclpy
 from geometry_msgs.msg import TwistStamped
 from mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
+from mqtt_2_cmd_pkg.tof_sensor import ToFSensor
 from rclpy.node import Node
 
 BURGER_MAX_LIN_VEL = 0.22
@@ -63,6 +64,81 @@ class MqttToCmdVelNode(Node):
 
         self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock())
 
+        # --- ToF sensor logic ---
+        self.tof_threshold = 200  # stop threshold (mm)
+        self.tof_poll_interval = 0.1  # sampling frequency
+        # Flags for obstacles
+        self.front_obstacle = False
+        self.rear_obstacle = False
+
+        # Init ToF wrapper (handles XSHUT pins etc.)
+        try:
+            # xshut pins
+            self.tof = ToFSensor(xshut_front=18, xshut_rear=23)
+            self.tof.start_stream(
+                "front",
+                interval=self.tof_poll_interval,
+                range_mode=1,
+                callback=self._tof_callback,
+            )
+
+            self.current_stream = "front"
+            self.get_logger().info("ToF front stream started.")
+        except Exception as e:
+            self.get_logger().warn(f"ToF initialization failed: {e} — ToF disabled.")
+            self.tof = None
+
+    #
+    def _tof_callback(self, which, distance):
+        """
+        Callback from ToFSensor.start_stream. 'which' is 'front' or 'rear'.
+        'distance' is int (mm) or None.
+        Setter: front_obstacle/rear_obstacle and publishes STOP if detektion.
+        """
+        try:
+            if distance is None:
+                return
+            self.get_logger().debug(f"ToF {which}: {distance} mm")
+
+            if which == "front":
+                if distance <= self.tof_threshold:
+                    if not self.front_obstacle:
+                        self.front_obstacle = True
+                        self.get_logger().info(
+                            f"Front obstacle at {distance:.3f} mm — publishing STOP"
+                        )
+                        stop_msg = TwistStamped()
+                        stop_msg.header.stamp = self.get_clock().now().to_msg()
+                        stop_msg.twist.linear.x = 0.0
+                        stop_msg.twist.angular.z = 0.0
+                        self.publisher.publish(stop_msg)
+                else:
+                    if self.front_obstacle:
+                        self.front_obstacle = False
+                        self.get_logger().info(
+                            "Front obstacle cleared — allowing forward commands."
+                        )
+            elif which == "rear":
+                if distance <= self.tof_threshold:
+                    if not self.rear_obstacle:
+                        self.rear_obstacle = True
+                        self.get_logger().info(
+                            f"Rear obstacle at {distance:.3f} mm — publishing STOP"
+                        )
+                        stop_msg = TwistStamped()
+                        stop_msg.header.stamp = self.get_clock().now().to_msg()
+                        stop_msg.twist.linear.x = 0.0
+                        stop_msg.twist.angular.z = 0.0
+                        self.publisher.publish(stop_msg)
+                else:
+                    if self.rear_obstacle:
+                        self.rear_obstacle = False
+                        self.get_logger().info(
+                            "Rear obstacle cleared — allowing reverse commands."
+                        )
+        except Exception as e:
+            self.get_logger().error(f"Error in ToF callback: {e}")
+
     # When connecting to MQTT broker
     def on_connect(self, client, userdata, falgs, rc):
         if rc == 0:
@@ -94,20 +170,58 @@ class MqttToCmdVelNode(Node):
                     daemon=True,
                 )
                 self.Pos_tracker.return_thread.start()
-
                 return
 
-            # Check if meassage fit within constraints
-            linear_vel = check_linear_limit_velocity(payload["linear"]["x"])
-            angular_vel = check_angular_limit_velocity(payload["angular"]["z"])
+            # Get requested linear and angular commands
+            linear_cmd = payload.get("linear", {}).get("x", 0.0)
+            angular_cmd = payload.get("angular", {}).get("z", 0.0)
 
+            # If Pos_tracker return thread is running, signal it to stop
             if (
                 self.Pos_tracker.return_thread
                 and self.Pos_tracker.return_thread.is_alive()
             ):
                 self.Pos_tracker.return_stop_flag.set()
 
-            # Create a Twist message
+            # Block movement based on ToF flags (flags are set in _tof_callback using mm)
+            # Block forward if front_obstacle True
+            if linear_cmd > 0.0 and self.front_obstacle:
+                self.get_logger().warn(
+                    "Ignoring forward cmd_vel due to front ToF obstacle."
+                )
+                stop_msg = TwistStamped()
+                stop_msg.header.stamp = self.get_clock().now().to_msg()
+                stop_msg.twist.linear.x = 0.0
+                stop_msg.twist.angular.z = 0.0
+                self.publisher.publish(stop_msg)
+                return
+
+            # Block reverse if rear_obstacle True
+            if linear_cmd < 0.0 and self.rear_obstacle:
+                self.get_logger().warn(
+                    "Ignoring reverse cmd_vel due to rear ToF obstacle."
+                )
+                stop_msg = TwistStamped()
+                stop_msg.header.stamp = self.get_clock().now().to_msg()
+                stop_msg.twist.linear.x = 0.0
+                stop_msg.twist.angular.z = 0.0
+                self.publisher.publish(stop_msg)
+                return
+
+            # Only switch ToF sensor if necessary (avoid frequent switches)
+            if self.tof is not None:
+                desired_sensor = "front" if linear_cmd > 0 else "rear"
+                if getattr(self, "current_stream", None) != desired_sensor:
+                    try:
+                        self.tof.switch_sensor(desired_sensor)
+                        self.current_stream = desired_sensor
+                    except Exception as e:
+                        self.get_logger().warn(f"ToF switch_sensor failed: {e}")
+
+            # Enforce velocity limits and publish
+            linear_vel = check_linear_limit_velocity(linear_cmd)
+            angular_vel = check_angular_limit_velocity(angular_cmd)
+
             twist_msg = self.create_twist_msg(linear_vel, angular_vel)
 
             # Publish to cmd_vel topic
@@ -141,6 +255,14 @@ def main(args=None):
         pass
     finally:
         node.mqtt_client.loop_stop()
+
+        # cleanup ToF hardware if available
+        try:
+            if hasattr(node, "tof") and node.tof is not None:
+                node.tof.cleanup()
+        except Exception:
+            pass
+
         node.destroy_node()
         rclpy.shutdown()
 
