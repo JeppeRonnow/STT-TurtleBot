@@ -44,6 +44,11 @@ class MqttToCmdVelNode(Node):
         self.mqtt_client = mqtt.Client()
         self.mqtt_client.on_connect = self.on_connect
         self.mqtt_client.on_message = self.on_message
+        
+        # Set up MQTT client to for GUI feedback
+        self.mqtt_client_2 = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self.mqtt_client_2.on_connect = self.on_connect
+        
 
         # Define MQTT connection details
         mqtt_server = "127.0.0.1"
@@ -52,15 +57,18 @@ class MqttToCmdVelNode(Node):
 
         # Connect to the MQTT broker
         self.mqtt_client.connect(mqtt_server, mqtt_port, 60)
+        self.mqtt_client_2.connect(mqtt_server, mqtt_port, 60)
 
         # Start the MQTT client loop in a non-blocking way
         self.mqtt_client.loop_start()
+        self.mqtt_client_2.loop_start()
 
         # Subscribe to the MQTT topic
         self.mqtt_client.subscribe(mqtt_topic)
 
         self.get_logger().info(f"Subscribed to MQTT topic: {mqtt_topic}")
 
+        # Init position tracking
         self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock())
 
 
@@ -101,7 +109,6 @@ class MqttToCmdVelNode(Node):
             if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
                 self.Pos_tracker.return_stop_flag.set()
 
-
             # Create a Twist message
             twist_msg = self.create_twist_msg(linear_vel, angular_vel)
 
@@ -109,7 +116,11 @@ class MqttToCmdVelNode(Node):
             self.publisher.publish(twist_msg)
             self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
 
+            # Save velocity information to the position tracker
             self.Pos_tracker.save_step(twist_msg)
+
+            # Send velocity information back to the GUI
+            self.publish_gui(linear_vel, angular_vel)
 
         except json.JSONDecodeError:
             self.get_logger().error("Failed to decode JSON from MQTT message.")
@@ -124,6 +135,26 @@ class MqttToCmdVelNode(Node):
         twist_msg.twist.linear.x = float(linear_vel)
         twist_msg.twist.angular.z = float(angular_vel)
         return twist_msg
+
+
+    # Publishes Velocity information to GUI topic
+    def publish_gui(self, linear_vel, angular_vel):
+        payload = {
+            "linear": {
+                "x": linear_vel,
+                "y": 0.0,
+                "z": 0.0
+            },
+            "angular": {
+                "x": 0.0,
+                "y": 0.0,
+                "z": angular_vel
+            }
+        }
+
+        # Publish velocities to gui toppic
+        self.mqtt_client_2.publish("mqtt_gui", json.dumps(payload), qos=1)
+        self.get_logger().info(f"Published to mqtt_gui: {payload}")
 
 
 def main(args=None):
