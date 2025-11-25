@@ -1,5 +1,5 @@
 from typing import List, Optional, Tuple, Union
-from mqtt_timer  import MqttTimer
+from move_timer  import Move_Timer
 
 class Logic:
     # move_syn = {"move", "go", "walk", "drive"} Not currently in use
@@ -13,12 +13,9 @@ class Logic:
 
     dist_units = {"mm", "millimeter", "millimeters", "cm", "centimeter", "centimeters", "m", "meter", "meters"}
 
-    # Listening delay before text pass
-    current_pause = 0
-
 
     # Object init
-    def __init__(self, mqtt_class, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
+    def __init__(self, move_timer, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
         self.PAUSE_ITTERATIONS = PAUSE_ITTERATIONS
         self.DEFAULT_TURN_DEG = DEFAULT_TURN_DEG
         self.DEFAULT_DISTANCE = DEFAULT_DISTANCE
@@ -26,55 +23,43 @@ class Logic:
         self.TURN_VELOCITY = TURN_VELOCITY
         self.DEBUG = DEBUG
 
-        self.timer = MqttTimer(mqtt_class, MOVE_VELOCITY, TURN_VELOCITY, DEBUG)
+        self.timer = move_timer
 
         if self.DEBUG: print(f"[Logic class initialized]")
 
 
     def handle_transcription(self, words: List[str]) -> Tuple[Optional[str], int]:
         if not words:
-            return None, 0
+            return None
 
-        n = len(words)
-        for i, word in enumerate(words):
+        for word in words:
             # Stop
             if word in self.stop_syn:
                 operation = "stop"
-                return operation, i + 1
+                return operation
             
             # Return
             if word in self.return_syn:
                 operation = "return"
-                return operation, i + 1
+                return operation
             
             # Turn left/right
             if word in self.turn_syn:
                 operation = "turn"
                 direction = None
                 distance = None
-                last_word_index = i
-                # Use the remaining words starting from current position
-                for j, current_word in enumerate(words):
-                    #if self.DEBUG: print(j, current_word)
+                for current_word in words:
                     if current_word in self.dir_syn:
                         direction = current_word
-                        if j > last_word_index:
-                            last_word_index = j
                     if self.is_number(current_word):
                         distance = self.format_number(current_word)
-                        if j > last_word_index:
-                            last_word_index = j
                     if direction and distance:
                         break
-                if self.await_input(last_word_index, n, distance):
-                    return None, 0
                 if not distance:
                     distance = self.format_number(self.DEFAULT_TURN_DEG)
                 if direction and distance:
-                    consumed = last_word_index + 1
-                    self.current_pause = 0
                     payload = self.format_payload(operation, direction, distance)
-                    return payload, consumed
+                    return payload
 
             # Move
             if word in self.fwd_syn or word in self.back_syn:
@@ -82,32 +67,22 @@ class Logic:
                 direction = "forward" if word in self.fwd_syn else "backward"
                 distance = None
                 unit = None
-                last_word_index = i
-                for j, current_word in enumerate(words):
-                    #if self.DEBUG: print(j, current_word)
-                    if self.is_number(current_word):
-                        distance = self.format_number(current_word)
-                        if j > last_word_index: 
-                            last_word_index = j
+                for current_word in words:
                     if current_word in self.dist_units:
                         unit = current_word
-                        if j > last_word_index:
-                            last_word_index = j
+                    if self.is_number(current_word):
+                        distance = self.format_number(current_word)
                     if distance and unit:
                         break
-                if self.await_input(last_word_index, n, distance, unit):
-                    return None, 0
                 if not distance:
                     distance = self.format_number(self.DEFAULT_DISTANCE)
                 if unit:
                     distance = self.format_unit(distance, unit)
                 if distance:
-                    consumed = last_word_index + 1
-                    self.current_pause = 0
                     payload = self.format_payload(operation ,direction, distance)
-                    return payload, consumed
+                    return payload
 
-        return None, 0
+        return None
 
 
     @staticmethod
@@ -145,28 +120,6 @@ class Logic:
             else: 
                 return f"{operation} {args[1]}"
         raise TypeError("Invalid format_payload arguments")
-    
-
-    def await_input(self, last_word_index, n, distance, unit=True) -> bool:
-        if last_word_index >= n and self.current_pause < self.PAUSE_ITTERATIONS:
-            if self.DEBUG: print("LAST WORD")
-            if self.DEBUG: print(f"Pausing for more input... ({self.current_pause}/{self.PAUSE_ITTERATIONS})")
-            self.current_pause += 1
-            return True
-
-        elif not distance and self.current_pause < self.PAUSE_ITTERATIONS:
-            if self.DEBUG: print("NOT DISTANCE")
-            if self.DEBUG: print(f"Pausing for more input... ({self.current_pause}/{self.PAUSE_ITTERATIONS})")
-            self.current_pause += 1
-            return True
-
-        elif not unit and self.current_pause < self.PAUSE_ITTERATIONS:
-            if self.DEBUG: print("NOT UNIT")
-            if self.DEBUG: print(f"Pausing for more input... ({self.current_pause}/{self.PAUSE_ITTERATIONS})")
-            self.current_pause += 1
-            return True
-
-        return False
 
 
     # Convert payload to velocities

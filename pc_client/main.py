@@ -1,11 +1,8 @@
-import sounddevice as sd
-import numpy as np
-import queue
-import time
-
 from mqtt import MQTT_Transmitter
+from move_timer import Move_Timer
 from config import Config
 from record import Record
+from stt import WakeWord
 from logic import Logic
 from stt import STT
 from dsp import DSP
@@ -15,72 +12,62 @@ def main():
     config = Config() # Load config variables from YAML file
 
     # Init objects
-    mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)                                                                                    # MQTT_Transmitter
-    filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.DEBUG)                                                     # Bandpass filter
-    logic = Logic(mqtt, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
-    audio = Record(config.SAMPLE_RATE, config.DEBUG)                                                                                          # Audio recorder
+    mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG) # MQTT_Transmitter
+    move_timer = Move_Timer(mqtt, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
+    logic = Logic(move_timer, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG) # Logic control
+    filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.FILTER_ORDER, config.DEBUG) # Bandpass filter
+    audio = Record(config.SAMPLE_RATE, config.DEBUG) # Audio recorder
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
+    wakeWord = WakeWord(config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.DEBUG) # Wake word detection
 
     # Load Whisper STT model
     model = whisper.load_model()
 
-    next_transcribe_time = 0.0
-    blocksize = int(config.CHUNK_SECONDS * config.SAMPLE_RATE)
+    while True:
+        try:
+            # Wait for wake word
+            wakeWord.await_wake_word()
+        
+            # Record audio and save
+            raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)  # Wait until recording is finished
+            audio.save_audio(raw, "Raw.wav")
 
-    try:
-        with sd.InputStream(channels=1, samplerate=config.SAMPLE_RATE, blocksize=blocksize, dtype='float32', callback=whisper.audio_callback, device=config.AUDIO_DEVICE):
+            # Apply filters and save
+            filtered = filter.apply_filters(raw)
+            audio.save_audio(filtered, "Filtered.wav")
+            
+            # Normalize lightly to (-1,1)
+            normalized = filter.normalize(filtered)
+            audio.save_audio(normalized, "Normalized.wav")
+
+            # Run STT and update token buffer
+            whisper.transcribe(model, normalized)
+
+            # Handle commands from tokens
             while True:
-                try:    # Wait for next chunk signal
-                    whisper.get_tick_q(timeout=1.0)
-                except queue.Empty:
-                    continue
-
-                now = time.time()
-                if now < next_transcribe_time:
-                    continue
-                next_transcribe_time = now + config.CHUNK_SECONDS * 0.9  # slight overlap
-
-                with whisper.get_buffer_lock():
-                    if not whisper.get_audio_buffer():
-                        continue
-                    raw = np.array(whisper.get_audio_buffer(), dtype=np.float32)
-                                   # Apply filters
-                filtered = filter.apply_filters(raw)
-                
-                # Normalize lightly to (-1,1)
-                filtered = filter.normalize(filtered)
-
-                # Save audio for reference/debugging
-                audio.save_audio(raw, filtered)
-
-                # Run STT and update token buffer
-                whisper.transcribe(model, filtered)
-
                 # Print current transcription
                 whisper.print_transcription()
-
-                # Handle commands from tokens
+                
+                # Get current words
                 words = whisper.get_transcription()
-                payload, consumed = logic.handle_transcription(words)
+                payload = logic.handle_transcription(words)
                 if payload:
                     if config.DEBUG: print("[Payload]:", payload)
                     velocities = logic.payload_to_velocities(payload)
                     mqtt.publish_command(velocities[0], velocities[1])
-                if consumed:
-                    if config.DEBUG: print("[Consumed]:", consumed)
-                    whisper.strip_transcription(consumed)
+                    whisper.strip_transcription()
+                else: 
+                    whisper.strip_transcription()
+                    break                    
 
-    except KeyboardInterrupt:
-        print("\nCtrl+C pressed. Sending stop command (linear.x=0, angular.z=0) and disconnecting.")
+        except KeyboardInterrupt:
+            print("\nCtrl+C pressed. Sending stop command (linear.x=0, angular.z=0) and disconnecting.")
+            mqtt.publish_command(0.0, 0.0)
+            break
 
-        # Send stop command with zero velocities
-        mqtt.publish_command(0.0, 0.0)
-
-    finally:
-        mqtt.close_connectio()
+    mqtt.close_connectio()
+    print("\nScript stopped succesfully...")
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\nScript stopped succesfully...")
+    main()
+        

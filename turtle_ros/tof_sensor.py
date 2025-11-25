@@ -1,9 +1,8 @@
-import VL53L1X
-import signal
+import threading
 import time
 import sys
 import RPi.GPIO as GPIO
-import time
+import VL53L1X
 
 class Matrix:
     def __init__(self):
@@ -57,11 +56,21 @@ class TOF_Sensor:
         data = self.get_data()
         return data(15,8)  # assuming the floor distance is at the center of the last row
 
+        for p in self._pins.values():
+            GPIO.setup(p, GPIO.OUT, initial=GPIO.LOW)
+            GPIO.output(p, GPIO.LOW)
 
 
     def get_data(self) -> Matrix:
         return self.matrix # Change this to return actual sensor data
 
+        # Streaming attributes
+        self._stream_thread = None  # initialize stream attributes
+        self._stream_stop = None
+        self._stream_which = None
+        self._stream_interval = None
+        self._stream_range_mode = None
+        self._stream_callback = None
 
     def blink_led(self):
         try:
@@ -75,6 +84,9 @@ class TOF_Sensor:
         finally:
             GPIO.cleanup()
 
+        with self._lock:
+            if self._tofs[which] is not None:
+                return
 
     def object_detection(self):
         # continuously monitor the sensor data for object detection
@@ -89,8 +101,118 @@ class TOF_Sensor:
         return False
 
 
+        # Save stream parameters so we can reuse them when switching sensors
+        self._stream_which = which
+        self._stream_interval = float(interval)
+        self._stream_range_mode = int(range_mode)
+        self._stream_callback = callback
 
+        stop_event = threading.Event()
+        thread = threading.Thread(
+            target=self._stream_worker,
+            args=(which, float(interval), int(range_mode), callback, stop_event),
+            daemon=True,
+        )
+        self._stream_thread = thread
+        self._stream_stop = stop_event
+        thread.start()
+
+    def stop_stream(self, timeout=1.0):
+        """Signal the background stream to stop and wait for it to finish."""
+        if self._stream_stop:
+            self._stream_stop.set()
+        if self._stream_thread:
+            self._stream_thread.join(timeout=timeout)
+        self._stream_thread = None
+        self._stream_stop = None
+        self._stream_which = None
+        self._stream_interval = None
+        self._stream_range_mode = None
+        self._stream_callback = None
+
+    #
+    def switch_sensor(self, which):
+        """
+        Switch the currently-running sensor to `which`.
+        - If a background stream is running, it will be stopped and restarted on `which`
+        with the same parameters (interval, range_mode, callback).
+        - If no stream is running, this will initialize `which` (and close the other sensor).
+        """
+        if which not in ("front", "rear"):
+            raise ValueError("which must be 'front' or 'rear'")
+
+        other = "rear" if which == "front" else "front"
+
+        # If requested sensor already open and streaming, nothing to do
+        if (
+            self._stream_thread
+            and self._stream_thread.is_alive()
+            and self._stream_which == which
+        ):
+            return
+
+        # Save current stream params (if any)
+        current_interval = self._stream_interval
+        current_range_mode = self._stream_range_mode
+        current_callback = self._stream_callback
+        was_streaming = bool(self._stream_thread and self._stream_thread.is_alive())
+
+        # Stop current stream (if any)
+        if was_streaming:
+            self.stop_stream()
+
+        # Close the other sensor to ensure only `which` is enabled (and to avoid I2C address conflict)
+        try:
+            self.close_sensor(other)
+        except Exception:
+            pass
+
+        # Initialize requested sensor (so it's ready)
+        try:
+            # prefer explicit range_mode if provided earlier; otherwise default to 1
+            self.init_sensor(which, range_mode=current_range_mode or 1)
+        except Exception:
+            # if init fails, leave state consistent and return
+            return
+
+        # If we were streaming before, restart streaming on the requested sensor with same params
+        if was_streaming:
+            interval = current_interval if current_interval is not None else 0.05
+            range_mode = current_range_mode if current_range_mode is not None else 1
+            callback = current_callback
+            # start_stream will set _stream_which etc.
+            self.start_stream(
+                which, interval=interval, range_mode=range_mode, callback=callback
+            )
+
+    #
+    def cleanup(self):
+        """Close any open sensors, disable pins, and clean up GPIO."""
+        try:
+            self.stop_stream()
+        except Exception:
+            pass
+        try:
+            self.close_sensor("front")
+        except Exception:
+            pass
+        try:
+            self.close_sensor("rear")
+        except Exception:
+            pass
+        self._disable_both()
+        try:
+            GPIO.cleanup()
+        except Exception:
+            pass
+
+    def cliff_detection(self):
+        pass
+
+
+"""
 if __name__ == "__main__":
+    sensor = ToFSensor()
     try:
         TOF_Sensor(None)
         print("TOF Sensor initialized and running.")
