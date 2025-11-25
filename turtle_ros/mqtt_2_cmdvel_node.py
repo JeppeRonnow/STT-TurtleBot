@@ -59,8 +59,10 @@ class MqttToCmdVelNode(Node):
 
         # Subscribe to the MQTT topic
         self.mqtt_client.subscribe(mqtt_topic)
-
         self.get_logger().info(f"Subscribed to MQTT topic: {mqtt_topic}")
+        
+        # Init Position tracking for robot to enable return for the robot
+        self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock()) # Tracks position of robot
 
         self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock())
 
@@ -155,73 +157,25 @@ class MqttToCmdVelNode(Node):
             payload = json.loads(msg.payload.decode())
 
             # Check if comand is return
-            if payload["linear"]["x"] == 69.69 and payload["angular"]["z"] == 69.69:
-                self.Pos_tracker.save_step(self.create_twist_msg(0.0, 0.0))
+            if (payload['linear']['x'] == 69.69 and payload['angular']['z'] == 69.69):
+                self.start_collision_detection()
+                self.start_return()
+                return 
 
-                if (
-                    self.Pos_tracker.return_thread
-                    and self.Pos_tracker.return_thread.is_alive()
-                ):
-                    return
+            # Check if return is active
+            self.stop_return_thread_if_active()
 
-                self.Pos_tracker.return_thread = threading.Thread(
-                    target=self.Pos_tracker.return_to_start,
-                    args=(self.publisher,),
-                    daemon=True,
-                )
-                self.Pos_tracker.return_thread.start()
-                return
+            # Check if collision detection is active before we start a new thread
+            self.stop_collision_thread_if_active()
 
-            # Get requested linear and angular commands
-            linear_cmd = payload.get("linear", {}).get("x", 0.0)
-            angular_cmd = payload.get("angular", {}).get("z", 0.0)
+            # Start collision_thread
+            self.start_collision_detection()
 
-            # If Pos_tracker return thread is running, signal it to stop
-            if (
-                self.Pos_tracker.return_thread
-                and self.Pos_tracker.return_thread.is_alive()
-            ):
-                self.Pos_tracker.return_stop_flag.set()
+            # Check if meassage fit within constraints, and constrain if nescesarry
+            linear_vel = check_linear_limit_velocity(payload['linear']['x'])
+            angular_vel = check_angular_limit_velocity(payload['angular']['z'])
 
-            # Block movement based on ToF flags (flags are set in _tof_callback using mm)
-            # Block forward if front_obstacle True
-            if linear_cmd > 0.0 and self.front_obstacle:
-                self.get_logger().warn(
-                    "Ignoring forward cmd_vel due to front ToF obstacle."
-                )
-                stop_msg = TwistStamped()
-                stop_msg.header.stamp = self.get_clock().now().to_msg()
-                stop_msg.twist.linear.x = 0.0
-                stop_msg.twist.angular.z = 0.0
-                self.publisher.publish(stop_msg)
-                return
-
-            # Block reverse if rear_obstacle True
-            if linear_cmd < 0.0 and self.rear_obstacle:
-                self.get_logger().warn(
-                    "Ignoring reverse cmd_vel due to rear ToF obstacle."
-                )
-                stop_msg = TwistStamped()
-                stop_msg.header.stamp = self.get_clock().now().to_msg()
-                stop_msg.twist.linear.x = 0.0
-                stop_msg.twist.angular.z = 0.0
-                self.publisher.publish(stop_msg)
-                return
-
-            # Only switch ToF sensor if necessary (avoid frequent switches)
-            if self.tof is not None:
-                desired_sensor = "front" if linear_cmd > 0 else "rear"
-                if getattr(self, "current_stream", None) != desired_sensor:
-                    try:
-                        self.tof.switch_sensor(desired_sensor)
-                        self.current_stream = desired_sensor
-                    except Exception as e:
-                        self.get_logger().warn(f"ToF switch_sensor failed: {e}")
-
-            # Enforce velocity limits and publish
-            linear_vel = check_linear_limit_velocity(linear_cmd)
-            angular_vel = check_angular_limit_velocity(angular_cmd)
-
+            # Create a Twist message
             twist_msg = self.create_twist_msg(linear_vel, angular_vel)
 
             # Publish to cmd_vel topic
@@ -230,7 +184,7 @@ class MqttToCmdVelNode(Node):
                 f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}"
             )
 
-            self.Pos_tracker.save_step(twist_msg)
+            self.Pos_tracker.save_step(twist_msg) # Save velocities and time to list of steps
 
         except json.JSONDecodeError:
             self.get_logger().error("Failed to decode JSON from MQTT message.")
@@ -244,6 +198,68 @@ class MqttToCmdVelNode(Node):
         twist_msg.twist.linear.x = float(linear_vel)
         twist_msg.twist.angular.z = float(angular_vel)
         return twist_msg
+
+
+    # Starts the return of the robot
+    def start_return(self):
+        # Make sure robot is stationary and nescesarry for time calculation if return is called while robot is moveing
+        twist_msg_stop = self.create_twist_msg(0.0, 0.0)
+        self.Pos_tracker.save_step(twist_msg_stop)
+        
+        # If return method is already running continue returning and wait for new msg
+        if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
+            return
+
+        # Setup thread to run the return method and start it
+        self.Pos_tracker.return_thread = threading.Thread(
+            target=self.Pos_tracker.return_to_start,
+            args=(self.publisher,),
+            daemon=True
+        )
+        self.Pos_tracker.return_thread.start()
+
+
+    # Start thread for collision detection 
+    def start_collision_detection(self):
+        self.collision_thread = threading.Thread(
+            target=self.collision_detection,
+            args=(),
+            daemon=True
+        )
+        self.collision_thread.start()
+
+
+    # Checks if the return_thread is active and stops it if it active
+    def stop_return_thread_if_active(self):
+        if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
+                self.Pos_tracker.return_stop_flag.set()
+                self.Pos_tracker.return_thread.join()
+
+
+    # Checks if the collision_thread is active and stops it if it active
+    def stop_collision_thread_if_active(self):
+        if self.collision_thread and self.collision_thread.is_alive():
+                self.collision_thread_flag.set()    # Set stop flag for collision_thread
+                self.collision_thread.join()        # Wait for collision_thread to stop safely
+
+
+    # Is run as a thread from the on_message function
+    def collision_detection(self):
+        # Keep checking if there is a collision
+        while not self.collision_thread_flag.is_set():
+            is_collision = self.Tof_sensor.object_detection() # Returns true if a collision is detected, false otherwise
+            if is_collision:
+                break
+
+        # Publish stop velocities only in case of collision
+        if not self.collision_thread_flag.is_set():
+            twist_msg = self.create_twist_msg(0.0, 0.0)
+            self.publisher.publish(twist_msg)
+
+            # Check if the return thread is active and if active stop it
+            self.stop_return_thread_if_active()
+
+            self.Pos_tracker.save_step(twist_msg) # Save the stop steps
 
 
 def main(args=None):
