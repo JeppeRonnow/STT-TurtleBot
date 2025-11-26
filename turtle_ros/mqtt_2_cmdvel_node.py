@@ -8,11 +8,8 @@ from mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
 from mqtt_2_cmd_pkg.tof_sensor import ToFSensor
 from rclpy.node import Node
 
-import tof_sensor
-
 BURGER_MAX_LIN_VEL = 0.22
 BURGER_MAX_ANG_VEL = 2.84
-
 
 # Constrain a velcoty within upper and lower bound
 def constrain(input_vel, low_bound, high_bound):
