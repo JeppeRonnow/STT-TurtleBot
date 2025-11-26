@@ -147,12 +147,12 @@ class MqttToCmdVelNode(Node):
 
     # Start thread for collision detection 
     def start_collision_detection(self, linear_vel):
-        self.collision_thread = threading.Thread(
+        self.tof.collision_thread = threading.Thread(
             target=self.collision_detection,
             args=(linear_vel),
             daemon=True
         )
-        self.collision_thread.start()
+        self.tof.collision_thread.start()
 
 
     # Checks if the return_thread is active and stops it if it active
@@ -164,9 +164,9 @@ class MqttToCmdVelNode(Node):
 
     # Checks if the collision_thread is active and stops it if it active
     def stop_collision_thread_if_active(self):
-        if self.collision_thread and self.collision_thread.is_alive():
+        if self.tof.collision_thread and self.tof.collision_thread.is_alive():
                 self.tof.collision_thread_flag.set()    # Set stop flag for collision_thread
-                self.collision_thread.join()        # Wait for collision_thread to stop safely
+                self.tof.collision_thread.join()        # Wait for collision_thread to stop safely
 
 
     # Is run as a thread from the on_message function

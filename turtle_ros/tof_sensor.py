@@ -30,6 +30,7 @@ class ToFSensor:
 
         self._tofs = {"front": None, "rear": None}
         self._lock = threading.RLock()
+        self.collision_thread = None
         self.collision_thread_flag = threading.Event()
 
         # Streaming attributes
