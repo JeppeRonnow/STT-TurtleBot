@@ -338,20 +338,3 @@ class ToFSensor:
 
     def cliff_detection(self):
         pass
-
-
-# If run as main
-if __name__ == "__main__":
-    sensor = ToFSensor()
-    try:
-        while True:
-            sensor.stream("front", interval=0.3)
-            time.sleep(1)
-            sensor.stop_stream()
-            time.sleep(1)
-            sensor.stream("rear", interval=0.3)
-            time.sleep(1)
-            sensor.stop_stream()
-            time.sleep(1)
-    finally:
-        sensor.cleanup()
