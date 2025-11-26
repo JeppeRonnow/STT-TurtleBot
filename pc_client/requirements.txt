@@ -28,7 +28,6 @@ packaging==25.0
 paho-mqtt==2.1.0
 pillow==12.0.0
 protobuf==6.33.0
-PyAudio==0.2.14
 pycparser==2.23
 pyparsing==3.2.5
 python-dateutil==2.9.0.post0
