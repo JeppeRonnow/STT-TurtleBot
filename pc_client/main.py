@@ -17,7 +17,7 @@ def main():
     logic = Logic(move_timer, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG) # Logic control
     filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.FILTER_ORDER, config.DEBUG) # Bandpass filter
     audio = Record(config.SAMPLE_RATE, config.DEBUG) # Audio recorder
-    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
+    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
     wakeWord = WakeWord(config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.DEBUG) # Wake word detection
 
     # Load Whisper STT model
@@ -29,7 +29,7 @@ def main():
             wakeWord.await_wake_word()
         
             # Record audio and save
-            raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)  # Wait until recording is finished
+            raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)  
             audio.save_audio(raw, "Raw.wav")
 
             # Apply filters and save
@@ -50,14 +50,13 @@ def main():
                 
                 # Get current words
                 words = whisper.get_transcription()
+                whisper.strip_transcription()
                 payload = logic.handle_transcription(words)
                 if payload:
                     if config.DEBUG: print("[Payload]:", payload)
                     velocities = logic.payload_to_velocities(payload)
-                    mqtt.publish_command(velocities[0], velocities[1])
-                    whisper.strip_transcription()
+                    mqtt.publish_command(velocities[0], velocities[1])                    
                 else: 
-                    whisper.strip_transcription()
                     break                    
 
         except KeyboardInterrupt:
