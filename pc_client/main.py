@@ -1,6 +1,7 @@
 import threading
 
 from config import Config
+from Dashboard import Dashboard
 from dsp import DSP
 from logic import Logic
 from move_timer import Move_Timer
@@ -148,7 +149,7 @@ class RobotController:
 
 
 def main():
-    """Main entry point - stays on main thread for future GUI"""
+    """Main entry point - runs GUI on main thread"""
     print("[Main] Starting on main thread:", threading.current_thread().name)
 
     # Create controller instance
@@ -157,14 +158,18 @@ def main():
     # Start controller on separate thread
     controller.start()
 
-    # Main thread loop - this is where GUI will go later
+    # Create and run Dashboard on main thread
     try:
-        print("[Main] Main thread is free for GUI")
-        print("[Main] Press Ctrl+C to stop...")
+        print("[Main] Starting Dashboard GUI on main thread")
+        app = Dashboard()
 
-        # Keep main thread alive and monitor the controller
-        while controller.is_running():
-            threading.Event().wait(1.0)  # Sleep for 1 second intervals
+        # TODO: Connect dashboard to controller for live updates
+        # This will require adding methods to update dashboard with:
+        # - Robot position/velocity
+        # - Audio/LDR sensor data
+        # - Transcription results
+
+        app.mainloop()  # This blocks until window is closed
 
     except KeyboardInterrupt:
         print("\n[Main] Ctrl+C pressed in main thread")
