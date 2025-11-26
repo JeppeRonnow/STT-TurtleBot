@@ -27,7 +27,6 @@ def main():
         try:
             # Wait for wake word
             wakeWord.await_wake_word()
-            continue
         
             # Record audio and save
             raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)  

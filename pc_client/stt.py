@@ -4,7 +4,6 @@ import sounddevice as sd
 import numpy as np
 import threading
 import whisper
-import queue
 import time
 
 class STT:
