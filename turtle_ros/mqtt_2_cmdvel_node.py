@@ -149,7 +149,7 @@ class MqttToCmdVelNode(Node):
     def start_collision_detection(self, linear_vel):
         self.tof.collision_thread = threading.Thread(
             target=self.collision_detection,
-            args=(linear_vel),
+            args=(linear_vel,),
             daemon=True
         )
         self.tof.collision_thread.start()
