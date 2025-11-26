@@ -31,6 +31,9 @@ def main():
     # Load Whisper STT model
     model = whisper.load_model()
 
+    # Start MQTT Receiver thread
+    reciever.start()
+
     while True:
         try:
             # Wait for wake word
@@ -69,7 +72,7 @@ def main():
 
         except KeyboardInterrupt:
             print("\nCtrl+C pressed. Sending stop command (linear.x=0, angular.z=0) and disconnecting.")
-            mqtt.pubs_command(0.0, 0.0)
+            mqtt.publish_command(0.0, 0.0)
             break
 
     mqtt.close_connectio()

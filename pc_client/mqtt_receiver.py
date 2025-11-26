@@ -1,10 +1,11 @@
 import paho.mqtt.client as mqtt
+import threading
 import json
 
 class MQTT_Receiver:
     mqtt_server = ""    # IP for mqtt broker
     mqtt_port = 1883    # Port for mqtt broker
-    mqtt_topic = "mqtt_status"     # Topic for mqtt broker
+    mqtt_topic = "mqtt_gui"     # Topic for mqtt broker
     
     def __init__(self, server, DEBUG):
         self.mqtt_server = server   # Set IP of mqtt broker
@@ -15,6 +16,10 @@ class MQTT_Receiver:
         self.mqtt_client.on_connect = self.on_connect
         self.mqtt_client.on_message = self.on_message
 
+        if self.DEBUG: print(f"[MQTT_Reciever class initialized]")
+
+    
+    def start(self):
         # Connect to MQTT broker
         self.mqtt_client.connect(self.mqtt_server, self.mqtt_port, 60)
 
@@ -24,7 +29,7 @@ class MQTT_Receiver:
         # Subscribe to the MQTT topic
         self.mqtt_client.subscribe(self.mqtt_topic)
 
-        if DEBUG: print(f"Subscribed to MQTT topic: {self.mqtt_topic}")
+        if self.DEBUG: print(f"Subscribed to MQTT topic: {self.mqtt_topic}")
 
 
     # When connecting to the MQTT broker

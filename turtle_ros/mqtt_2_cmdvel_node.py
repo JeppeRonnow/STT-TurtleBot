@@ -46,9 +46,8 @@ class MqttToCmdVelNode(Node):
         self.mqtt_client.on_message = self.on_message
         
         # Set up MQTT client to for GUI feedback
-        self.mqtt_client_2 = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
-        self.mqtt_client_2.on_connect = self.on_connect
-        
+        self.mqtt_gui_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self.mqtt_gui_client.on_connect = self.on_connect
 
         # Define MQTT connection details
         mqtt_server = "127.0.0.1"
@@ -57,11 +56,11 @@ class MqttToCmdVelNode(Node):
 
         # Connect to the MQTT broker
         self.mqtt_client.connect(mqtt_server, mqtt_port, 60)
-        self.mqtt_client_2.connect(mqtt_server, mqtt_port, 60)
+        self.mqtt_gui_client.connect(mqtt_server, mqtt_port, 60)
 
         # Start the MQTT client loop in a non-blocking way
         self.mqtt_client.loop_start()
-        self.mqtt_client_2.loop_start()
+        self.mqtt_gui_client.loop_start()
 
         # Subscribe to the MQTT topic
         self.mqtt_client.subscribe(mqtt_topic)
@@ -120,7 +119,10 @@ class MqttToCmdVelNode(Node):
             self.Pos_tracker.save_step(twist_msg)
 
             # Send velocity information back to the GUI
-            self.publish_gui(linear_vel, angular_vel)
+            self.mqtt_transmit("movement", {"linear": linear_vel, "angular": angular_vel})
+            self.mqtt_transmit("sensor", {"direction": "front", "value": 1.23})
+            self.mqtt_transmit("sensor", {"direction": "rear", "value": 1.23})
+
 
         except json.JSONDecodeError:
             self.get_logger().error("Failed to decode JSON from MQTT message.")
@@ -135,26 +137,32 @@ class MqttToCmdVelNode(Node):
         twist_msg.twist.linear.x = float(linear_vel)
         twist_msg.twist.angular.z = float(angular_vel)
         return twist_msg
+    
 
+    # Publishes data to MQTT topics
+    def mqtt_transmit(self, type: str, data: dict = None):
+        if data is None:
+            data = {}
 
-    # Publishes Velocity information to GUI topic
-    def publish_gui(self, linear_vel, angular_vel):
-        payload = {
-            "linear": {
-                "x": linear_vel,
-                "y": 0.0,
-                "z": 0.0
-            },
-            "angular": {
-                "x": 0.0,
-                "y": 0.0,
-                "z": angular_vel
-            }
-        }
+        payload = {"type": type}
+        
+        if type == "movement":
+            payload["linear"] = data.get("linear", 0.0)
+            payload["angular"] = data.get("angular", 0.0)
+            topic = "mqtt_gui"
+            
+        elif type == "sensor":
+            payload["direction"] = data.get("direction", "unknown")
+            payload["value"] = data.get("value", 0.0)
+            topic = "mqtt_gui"
+            
+        else:
+            self.get_logger().warning(f"Unknown message type: {type}")
+            return
 
-        # Publish velocities to gui toppic
-        self.mqtt_client_2.publish("mqtt_gui", json.dumps(payload), qos=1)
-        self.get_logger().info(f"Published to mqtt_gui: {payload}")
+        # Publish to MQTT
+        self.mqtt_gui_client.publish(topic, json.dumps(payload), qos=1)
+        self.get_logger().info(f"Published to {topic}: {payload}")
 
 
 def main(args=None):
