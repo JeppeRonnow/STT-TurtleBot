@@ -165,7 +165,7 @@ class MqttToCmdVelNode(Node):
     # Checks if the collision_thread is active and stops it if it active
     def stop_collision_thread_if_active(self):
         if self.collision_thread and self.collision_thread.is_alive():
-                self.collision_thread_flag.set()    # Set stop flag for collision_thread
+                self.tof.collision_thread_flag.set()    # Set stop flag for collision_thread
                 self.collision_thread.join()        # Wait for collision_thread to stop safely
 
 
@@ -179,9 +179,9 @@ class MqttToCmdVelNode(Node):
         collision = False
 
         # Read sensor for collision
-        while not self.collision_thread_flag.is_set():
+        while not self.tof.collision_thread_flag.is_set():
             # Keep checking if there is a collision
-            collision = tof.stream(direction)
+            collision = self.tof.stream(direction)
 
             if collision:
                 break

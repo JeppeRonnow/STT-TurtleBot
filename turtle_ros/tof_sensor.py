@@ -30,6 +30,7 @@ class ToFSensor:
 
         self._tofs = {"front": None, "rear": None}
         self._lock = threading.RLock()
+        self.collision_thread_flag = threading.Event()
 
         # Streaming attributes
         self._stream_thread = None  # initialize stream attributes
@@ -120,6 +121,9 @@ class ToFSensor:
         called as callback(which, distance). Otherwise prints readings.
         """
 
+        # Clear flag
+        self.collision_thread_flag.clear()
+
         # Check if valid sensor is chosen
         if which not in ("front", "rear"):
             self.logger.error("which must be 'front' or 'rear'")
@@ -138,6 +142,11 @@ class ToFSensor:
         try:
             while True:
                 with self._lock:
+                    # Check if collision lfag is set
+                    if self.collision_thread_flag.is_set():
+                        break
+
+
                     tof = self._tofs.get(which)
                     if not tof:
                         distance = 0
