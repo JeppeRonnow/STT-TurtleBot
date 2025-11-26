@@ -4,6 +4,7 @@ import numpy as np
 import queue
 import time
 
+from mqtt_receiver import MQTT_Receiver
 from mqtt import MQTT_Transmitter
 from config import Config
 from record import Record
@@ -19,6 +20,7 @@ def main():
 
     # Init objects
     mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)                                                                                    # MQTT_Transmitter
+    reciever = MQTT_Receiver(config.SERVER, config.DEBUG)      # MQTT_Receiver 
     move_timer = Move_Timer(mqtt, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
     filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.DEBUG)                                                     # Bandpass filter
     logic = Logic(move_timer, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
