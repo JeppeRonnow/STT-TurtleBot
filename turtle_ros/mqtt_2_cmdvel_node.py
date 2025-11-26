@@ -101,9 +101,7 @@ class MqttToCmdVelNode(Node):
 
             # Publish to cmd_vel topic
             self.publisher.publish(twist_msg)
-            self.get_logger().info(
-                f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}"
-            )
+            self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
 
             # Start collision_thread
             self.start_collision_detection(linear_vel)
@@ -190,6 +188,8 @@ class MqttToCmdVelNode(Node):
         if collision:
             twist_msg = self.create_twist_msg(0.0, 0.0)
             self.publisher.publish(twist_msg)
+            self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
+
 
             # Check if the return thread is active and if active stop it
             self.stop_return_thread_if_active()
