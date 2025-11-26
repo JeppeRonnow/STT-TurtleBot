@@ -1,3 +1,10 @@
+from move_timer import Move_Timer
+import sounddevice as sd
+import numpy as np
+import queue
+import time
+
+from mqtt_receiver import MQTT_Receiver
 from mqtt import MQTT_Transmitter
 from move_timer import Move_Timer
 from config import Config
@@ -12,7 +19,8 @@ def main():
     config = Config() # Load config variables from YAML file
 
     # Init objects
-    mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG) # MQTT_Transmitter
+    mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)                                                                                    # MQTT_Transmitter
+    reciever = MQTT_Receiver(config.SERVER, config.DEBUG)      # MQTT_Receiver 
     move_timer = Move_Timer(mqtt, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
     logic = Logic(move_timer, config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG) # Logic control
     filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.FILTER_ORDER, config.DEBUG) # Bandpass filter
@@ -61,7 +69,7 @@ def main():
 
         except KeyboardInterrupt:
             print("\nCtrl+C pressed. Sending stop command (linear.x=0, angular.z=0) and disconnecting.")
-            mqtt.publish_command(0.0, 0.0)
+            mqtt.pubs_command(0.0, 0.0)
             break
 
     mqtt.close_connectio()

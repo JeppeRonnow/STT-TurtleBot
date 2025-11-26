@@ -4,12 +4,11 @@ import json
 class MQTT_Receiver:
     mqtt_server = ""    # IP for mqtt broker
     mqtt_port = 1883    # Port for mqtt broker
-    mqtt_topic = ""     # Topic for mqtt broker
+    mqtt_topic = "mqtt_status"     # Topic for mqtt broker
     
-    def __init__(self, server, port, topic, DEBUG):
+    def __init__(self, server, DEBUG):
         self.mqtt_server = server   # Set IP of mqtt broker
-        self.mqtt_port = port       # Set Port of mqtt broker
-        self.mqtt_topic = topic     # Set Topic for mqtt
+        self.DEBUG = DEBUG
         
         # MQTT Client setup
         self.mqtt_client = mqtt.Client()
@@ -27,9 +26,10 @@ class MQTT_Receiver:
 
         if DEBUG: print(f"Subscribed to MQTT topic: {self.mqtt_topic}")
 
+
     # When connecting to the MQTT broker
     def on_connect(self, client, userdata, falgs, rc):
-        if DEBUG:
+        if self.DEBUG:
             if rc == 0: print("Connected to MQTT broker succesfully")
             else: print("Failed to connect to MQTT broker, return code %d", rc)
    
@@ -39,10 +39,32 @@ class MQTT_Receiver:
             # Assuming the MQTT message payload is a JSON with 'linear' and 'angular' float
             payload = json.loads(msg.payload.decode())
 
-            # JEPPE ADD CODE HERE TO ACT WHEN MESSAGE COMES IN
+            # Handle movement commands
+            if payload['type'] == "movement":
+                linear = float(payload['linear'])
+                angular = float(payload['angular'])
 
-        except json.JSONDecodeError:
-            if DEBUG: print("Failed to decode JSON from MQTT message.")
+                if self.DEBUG: print(f"[MQTT RECIEVER] Received movement command - Linear: {linear}, Angular: {angular}")
+            
+            # Handle sensor data
+            elif payload['type'] == "sensor":
+                if payload['direction'] == "front":
+                    sensor = float(payload['value'])
+                    if self.DEBUG: print(f"[MQTT RECIEVER] Received front sensor data: {sensor}")
+                elif payload['direction'] == "rear":
+                    sensor = float(payload['value'])
+                    if self.DEBUG: print(f"[MQTT RECIEVER] Received rear sensor data: {sensor}")
+                else:
+                    if self.DEBUG: print(f"[MQTT RECIEVER] Unknown sensor direction: {payload['direction']}")
+            else:
+                if self.DEBUG: print(f"[MQTT RECIEVER] Unknown message type: {payload['type']}")
+
+        except json.JSONDecodeError as e:
+            if self.DEBUG: print(f"Failed to decode JSON from MQTT message: {e}")
+
         except KeyError as e:
-            if DEBUG: print(f"Missing except key in MQTT message: {e}")
+            if self.DEBUG: print(f"Missing except key in MQTT message: {e}")
+
+        except Exception as e:
+            if self.DEBUG: print(f"Error processing MQTT message: {e}")
 
