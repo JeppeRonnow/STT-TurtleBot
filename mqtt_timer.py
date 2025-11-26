@@ -1,14 +1,13 @@
 import threading
 import math
 
-
-class Move_Timer:
+class MqttTimer:
     def __init__(self, mqtt_class, MOVE_VELOCITY, TURN_VELOCITY, DEBUG: bool = False):
         self.mqtt = mqtt_class
-        self.timer_thread = None
         self.MOVE_VELOCITY = MOVE_VELOCITY
         self.TURN_VELOCITY = TURN_VELOCITY
         self.DEBUG = DEBUG
+        self.move_timer = None
 
 
     def on_timeout(self) -> None:
@@ -25,15 +24,15 @@ class Move_Timer:
 
 
     def stop_timer(self) -> None:
-        if self.timer_thread and self.timer_thread.is_alive():
+        if self.move_timer and self.move_timer.is_alive():
             if self.DEBUG: print(f"[Move Timer] Cancelling previous timer.")
-            self.timer_thread.cancel()
+            self.move_timer.cancel()
 
 
     def set_timer(self, operation: str, distance: float) -> None:
         delay = self.calculate_delay(operation, distance)
 
         if self.DEBUG: print(f"[Move Timer] Setting timer for {delay:.2f} seconds.")
-        self.timer_thread = threading.Timer(delay, self.on_timeout)
-        self.timer_thread.daemon = True
-        self.timer_thread.start()
+        self.move_timer = threading.Timer(delay, self.on_timeout)
+        self.move_timer.daemon = True
+        self.move_timer.start()
