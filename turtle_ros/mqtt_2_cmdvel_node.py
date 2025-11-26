@@ -209,14 +209,6 @@ def main(args=None):
         pass
     finally:
         node.mqtt_client.loop_stop()
-
-        # cleanup ToF hardware if available
-        try:
-            if hasattr(node, "tof") and node.tof is not None:
-                node.tof.cleanup()
-        except Exception:
-            pass
-
         node.destroy_node()
         rclpy.shutdown()
 
