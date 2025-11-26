@@ -80,7 +80,7 @@ class WakeWord:
         self.THRESHOLD = THRESHOLD
         self.SAMPLE_RATE = SAMPLE_RATE
         self.BLOCK_SIZE = BLOCK_SIZE
-        self.COOLDOWN = 2.0  # seconds
+        self.COOLDOWN = 2.0
         self.DEBUG = DEBUG
         
         self.last_detection = 0.0
@@ -100,9 +100,13 @@ class WakeWord:
             print("[WakeWord] Model loaded successfully.")
 
 
+    def flag_is_set(self) -> bool:
+        return self.event.is_set()
+
+
     def callback(self, indata, frames, time_info, status) -> None:
         # Thread-safe exit check
-        if self.event.is_set():
+        if self.flag_is_set():
             return
     
         # Convert float32 [-1, 1] to int16 [-32768, 32767]
@@ -123,6 +127,7 @@ class WakeWord:
 
     def await_wake_word(self) -> None:
         self.event.clear()
+        self.last_detection = time.time()
 
         with sd.InputStream(
                 channels=1,
