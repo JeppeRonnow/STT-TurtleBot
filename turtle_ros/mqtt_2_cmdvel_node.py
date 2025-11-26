@@ -8,6 +8,8 @@ from mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
 from mqtt_2_cmd_pkg.tof_sensor import ToFSensor
 from rclpy.node import Node
 
+import tof_sensor
+
 BURGER_MAX_LIN_VEL = 0.22
 BURGER_MAX_ANG_VEL = 2.84
 
@@ -64,91 +66,17 @@ class MqttToCmdVelNode(Node):
         # Init Position tracking for robot to enable return for the robot
         self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock()) # Tracks position of robot
 
-        self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock())
+        # Init obstacle detection class
+        self.tof = ToFSensor(self.get_logger())
 
-        # --- ToF sensor logic ---
-        self.tof_threshold = 200  # stop threshold (mm)
-        self.tof_poll_interval = 0.1  # sampling frequency
-        # Flags for obstacles
-        self.front_obstacle = False
-        self.rear_obstacle = False
-
-        # Init ToF wrapper (handles XSHUT pins etc.)
-        try:
-            # xshut pins
-            self.tof = ToFSensor(xshut_front=18, xshut_rear=23)
-            self.tof.start_stream(
-                "front",
-                interval=self.tof_poll_interval,
-                range_mode=1,
-                callback=self._tof_callback,
-            )
-
-            self.current_stream = "front"
-            self.get_logger().info("ToF front stream started.")
-        except Exception as e:
-            self.get_logger().warn(f"ToF initialization failed: {e} — ToF disabled.")
-            self.tof = None
-
-    #
-    def _tof_callback(self, which, distance):
-        """
-        Callback from ToFSensor.start_stream. 'which' is 'front' or 'rear'.
-        'distance' is int (mm) or None.
-        Setter: front_obstacle/rear_obstacle and publishes STOP if detektion.
-        """
-        try:
-            if distance is None:
-                return
-            self.get_logger().debug(f"ToF {which}: {distance} mm")
-
-            if which == "front":
-                if distance <= self.tof_threshold:
-                    if not self.front_obstacle:
-                        self.front_obstacle = True
-                        self.get_logger().info(
-                            f"Front obstacle at {distance:.3f} mm — publishing STOP"
-                        )
-                        stop_msg = TwistStamped()
-                        stop_msg.header.stamp = self.get_clock().now().to_msg()
-                        stop_msg.twist.linear.x = 0.0
-                        stop_msg.twist.angular.z = 0.0
-                        self.publisher.publish(stop_msg)
-                else:
-                    if self.front_obstacle:
-                        self.front_obstacle = False
-                        self.get_logger().info(
-                            "Front obstacle cleared — allowing forward commands."
-                        )
-            elif which == "rear":
-                if distance <= self.tof_threshold:
-                    if not self.rear_obstacle:
-                        self.rear_obstacle = True
-                        self.get_logger().info(
-                            f"Rear obstacle at {distance:.3f} mm — publishing STOP"
-                        )
-                        stop_msg = TwistStamped()
-                        stop_msg.header.stamp = self.get_clock().now().to_msg()
-                        stop_msg.twist.linear.x = 0.0
-                        stop_msg.twist.angular.z = 0.0
-                        self.publisher.publish(stop_msg)
-                else:
-                    if self.rear_obstacle:
-                        self.rear_obstacle = False
-                        self.get_logger().info(
-                            "Rear obstacle cleared — allowing reverse commands."
-                        )
-        except Exception as e:
-            self.get_logger().error(f"Error in ToF callback: {e}")
 
     # When connecting to MQTT broker
     def on_connect(self, client, userdata, falgs, rc):
         if rc == 0:
             self.get_logger().info("Connect to MQTT broker succesfully")
         else:
-            self.get_logger().error(
-                "Failed to connect to MQTT broker, return code: %d", rc
-            )
+            self.get_logger().error(f"Failed to connect to MQTT broker, return code: {rc}")
+
 
     # When message is received
     def on_message(self, client, userdata, msg):
@@ -158,18 +86,14 @@ class MqttToCmdVelNode(Node):
 
             # Check if comand is return
             if (payload['linear']['x'] == 69.69 and payload['angular']['z'] == 69.69):
-                self.start_collision_detection()
                 self.start_return()
-                return 
+                return
 
             # Check if return is active
             self.stop_return_thread_if_active()
 
             # Check if collision detection is active before we start a new thread
             self.stop_collision_thread_if_active()
-
-            # Start collision_thread
-            self.start_collision_detection()
 
             # Check if meassage fit within constraints, and constrain if nescesarry
             linear_vel = check_linear_limit_velocity(payload['linear']['x'])
@@ -184,12 +108,17 @@ class MqttToCmdVelNode(Node):
                 f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}"
             )
 
+            # Start collision_thread
+            self.start_collision_detection(linear_vel)
+
+            # Save Position.
             self.Pos_tracker.save_step(twist_msg) # Save velocities and time to list of steps
 
         except json.JSONDecodeError:
             self.get_logger().error("Failed to decode JSON from MQTT message.")
         except KeyError as e:
             self.get_logger().error(f"Missing except key in MQTT message: {e}")
+
 
     # Create twist message
     def create_twist_msg(self, linear_vel, angular_vel):
@@ -220,10 +149,10 @@ class MqttToCmdVelNode(Node):
 
 
     # Start thread for collision detection 
-    def start_collision_detection(self):
+    def start_collision_detection(self, linear_vel):
         self.collision_thread = threading.Thread(
             target=self.collision_detection,
-            args=(),
+            args=(linear_vel),
             daemon=True
         )
         self.collision_thread.start()
@@ -244,15 +173,24 @@ class MqttToCmdVelNode(Node):
 
 
     # Is run as a thread from the on_message function
-    def collision_detection(self):
-        # Keep checking if there is a collision
+    def collision_detection(self, linear_vel):
+        if linear_vel > 0.0:
+            direction = "front"
+        else:
+            direction = "rear"
+
+        collision = False
+
+        # Read sensor for collision
         while not self.collision_thread_flag.is_set():
-            is_collision = self.Tof_sensor.object_detection() # Returns true if a collision is detected, false otherwise
-            if is_collision:
+            # Keep checking if there is a collision
+            collision = tof.stream(direction)
+
+            if collision:
                 break
 
         # Publish stop velocities only in case of collision
-        if not self.collision_thread_flag.is_set():
+        if collision:
             twist_msg = self.create_twist_msg(0.0, 0.0)
             self.publisher.publish(twist_msg)
 

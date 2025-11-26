@@ -1,68 +1,35 @@
 import threading
 import time
-import sys
+
 import RPi.GPIO as GPIO
 import VL53L1X
 
-class Matrix:
-    def __init__(self):
-        self.matrix = [[0.0 for _ in range(16)] for _ in range(16)]
-        print("Custom struct 'Matrix' initialized.")
-    
-    def __list__(self, row, col):
-        return self.matrix[row][col]
-    
-    def __str__(self):
-        print("\nMatrix Data:")
-        for row in self.matrix:
-            for col in row:
-                print(f"{col:.2f}", end=" ")
-        print("\n")
 
-class TOF_Sensor:
-    # Variables
-    I2C_BUS = 1
-    I2C_ADDR = 0x29
-    GRID_SIZE = 16                # 16x16 scan (consider 8 for speed)
-    THRESH_MM = 300               # 300 mm threshold
-    INTER_MEASUREMENT_MS = 20     # Sensor timing budget interplay; tune as needed
-    SLEEP_BETWEEN_ZONES = 0.0     # Small delay after set_user_roi (0–5 ms typically
-    STOP_THRESHOLD = 0.5  # distance in meters to trigger stop
-    LED_PIN = 18  # GPIO/BCM pin 18 (physical pin 12)
-   
+class ToFSensor:
+    def __init__(
+        self,
+        logger,
+        xshut_front: int = 18,
+        xshut_rear: int = 23,
+        boot_delay: float = 0.3,
+        settle: float = 0.3,
+    ):
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
 
-    def __init__(self, logger):
+        self._pins = {"front": xshut_front, "rear": xshut_rear}
+        self.boot_delay = boot_delay
+        self.settle = settle
+        self.i2c_bus = 1
+        self.i2c_addr = 0x29
         self.logger = logger
-
-        # initialize the sensor
-        self.matrix = Matrix()
-        GPIO.setmode(GPIO.BOARD)    # or GPIO.BOARD for physical numbering
-
-        GPIO.setup(self.LED_PIN, GPIO.OUT)
-
-        self.blink_led()
-
-        self.floor_distance = self.get_floor_distance()
-
-        print("[TOF Sensor initialized]")
-
-
-    def make_roi(top, left, bottom, right):
-        pass
-
- 
-    def get_floor_distance(self) -> float:
-        # return the distance to the floor from the sensor once on initialization
-        data = self.get_data()
-        return data(15,8)  # assuming the floor distance is at the center of the last row
 
         for p in self._pins.values():
             GPIO.setup(p, GPIO.OUT, initial=GPIO.LOW)
             GPIO.output(p, GPIO.LOW)
 
-
-    def get_data(self) -> Matrix:
-        return self.matrix # Change this to return actual sensor data
+        self._tofs = {"front": None, "rear": None}
+        self._lock = threading.RLock()
 
         # Streaming attributes
         self._stream_thread = None  # initialize stream attributes
@@ -72,34 +39,193 @@ class TOF_Sensor:
         self._stream_range_mode = None
         self._stream_callback = None
 
-    def blink_led(self):
-        try:
-            while True:
-                GPIO.output(self.LED_PIN, GPIO.HIGH)
-                time.sleep(0.5)
-                GPIO.output(self.LED_PIN, GPIO.LOW)
-                time.sleep(0.5)
-        except KeyboardInterrupt:
-            pass
-        finally:
-            GPIO.cleanup()
 
+    # Chose which sensor is enabled
+    def _enable(self, which):
+        GPIO.output(self._pins["front"], GPIO.LOW)
+        GPIO.output(self._pins["rear"], GPIO.LOW)
+        GPIO.output(self._pins[which], GPIO.HIGH)
+        time.sleep(self.boot_delay)
+
+
+    # Disable both sensors
+    def _disable_both(self):
+        GPIO.output(self._pins["front"], GPIO.LOW)
+        GPIO.output(self._pins["rear"], GPIO.LOW)
+
+
+    # Start VL53L1X class
+    def init_sensor(self, which, range_mode=1):
+        # Check valid sensor is chosen
+        if which not in ("front", "rear"):
+            self.logger.error("which must be 'front' or 'rear'")
+            return
+
+        # Start sensor
         with self._lock:
+            # Check if sensor class is already active
             if self._tofs[which] is not None:
                 return
 
-    def object_detection(self):
-        # continuously monitor the sensor data for object detection
-        data = self.get_data()
-        for value in data: # Only check top 4 rows
-            if value < self.STOP_THRESHOLD:
-                return True
-        for value in data: #check floor distance
-            if value < self.floor_distance - 0.1: #if an object is detected closer than the floor distance minus a small margin
-                return True
+            # Enable desired sensor
+            self._enable(which)
 
-        return False
+            # Init sensor library
+            tof = VL53L1X.VL53L1X(i2c_bus=self.i2c_bus, i2c_address=self.i2c_addr)
+            tof.open()
+            tof.start_ranging(range_mode)
+            time.sleep(self.settle)
 
+            # Save active VL53L1X class
+            self._tofs[which] = tof
+            # leave the sensor powered so it can be reused repeatedly
+
+
+    # Close a specific sensor
+    def close_sensor(self, which):
+        """Stop ranging and close the `which` sensor if it is open."""
+        if which not in ("front", "rear"):
+            self.logger.error("which must be 'front' or 'rear'")
+
+        # Close the sensor
+        with self._lock:
+            # Get the class for the sensor
+            tof = self._tofs.get(which)
+
+            # Check if sensor is active
+            if not tof:
+                return
+
+            # Try to stop the sensor and close it
+            try:
+                tof.stop_ranging()
+                tof.close()
+
+            except Exception:
+                self.logger.error(f"Failed to stop and close '{which}' sensor")
+                pass
+
+            # Clear class variable
+            self._tofs[which] = None
+
+            # make sure pins are disabled
+            self._disable_both()
+
+
+    # Continuous sensor read in a blocking way
+    def stream(self, which, interval=0.05, range_mode=1, callback=None):
+        """
+        Blocking continuous stream. Initializes (if needed) and repeatedly reads
+        until interrupted with KeyboardInterrupt. If `callback` is provided it will be
+        called as callback(which, distance). Otherwise prints readings.
+        """
+
+        # Check if valid sensor is chosen
+        if which not in ("front", "rear"):
+            self.logger.error("which must be 'front' or 'rear'")
+
+        # Try to init sensor
+        try:
+            # ensure sensor is initialized and ranging
+            self.init_sensor(which, range_mode=range_mode)
+
+        except Exception:
+            self.logger.error("Failed to init sensor")
+            return
+
+        self.logger.info(f"Streaming {which}")
+
+        try:
+            while True:
+                with self._lock:
+                    tof = self._tofs.get(which)
+                    if not tof:
+                        distance = 0
+                    else:
+                        try:
+                            distance = int(tof.get_distance())
+                        except Exception:
+                            distance = 0
+
+                if callback:
+                    try:
+                        callback(which, distance)
+
+                    except Exception:
+                        # keep streaming even if callback raises
+                        pass
+                else:
+                    self.logger.info(f"{which}: {distance}")
+
+                    # Return if distance to low
+                    if distance < 500:
+                        return True
+
+                time.sleep(interval)
+        except KeyboardInterrupt:
+            # graceful stop on user interrupt
+            pass
+
+
+    # Background threaded stream
+    def _stream_worker(self, which, interval, range_mode, callback, stop_event):
+        # Try to init sensor
+        try:
+            self.init_sensor(which, range_mode=range_mode)
+
+        except Exception:
+            self.logger.error("Failed to init sensor")
+            return
+
+        # Reads until stop_event is set
+        while not stop_event.is_set():
+            with self._lock:
+                tof = self._tofs.get(which) # Gets sensor class
+
+                # If sensor is not active
+                if not tof:
+                    distance = None
+
+                # Else try to read
+                else:
+                    try:
+                        distance = int(tof.get_distance())
+                    except Exception:
+                        self.logger.error(f"Failed to read from sensor {which}")
+                        distance = None
+
+            # If callback is set
+            if callback:
+                # Try callback
+                try:
+                    callback(which, distance)
+                except Exception:
+                    self.logger.error("Callback failed")
+                    pass
+
+            # If no callback print distance
+            else:
+                print(f"{which}: {distance}")
+
+            # use wait so we can stop promptly
+            stop_event.wait(interval)
+
+
+    # start streaming data from a sensor
+    def start_stream(self, which, interval=0.05, range_mode=1, callback=None):
+        """
+        Start a non-blocking background streaming thread. Only one stream per instance
+        is supported; call stop_stream() before starting another.
+        """
+        if which not in ("front", "rear"):
+            self.logger.error("which must be 'front' or 'rear'")
+            return
+
+        if self._stream_thread and self._stream_thread.is_alive():
+            self.logger.error(
+                "Stream already running. Stop it before starting a new one."
+            )
+            return
 
         # Save stream parameters so we can reuse them when switching sensors
         self._stream_which = which
@@ -117,12 +243,19 @@ class TOF_Sensor:
         self._stream_stop = stop_event
         thread.start()
 
+
+    # Stop an active stream
     def stop_stream(self, timeout=1.0):
         """Signal the background stream to stop and wait for it to finish."""
+        # Set stop flag
         if self._stream_stop:
             self._stream_stop.set()
+
+        # Wait for thread to finish
         if self._stream_thread:
             self._stream_thread.join(timeout=timeout)
+
+        # Clear thread variables
         self._stream_thread = None
         self._stream_stop = None
         self._stream_which = None
@@ -130,16 +263,12 @@ class TOF_Sensor:
         self._stream_range_mode = None
         self._stream_callback = None
 
-    #
+
+    # Switch the active sensor
     def switch_sensor(self, which):
-        """
-        Switch the currently-running sensor to `which`.
-        - If a background stream is running, it will be stopped and restarted on `which`
-        with the same parameters (interval, range_mode, callback).
-        - If no stream is running, this will initialize `which` (and close the other sensor).
-        """
+        # Check if valid sensor is chosen
         if which not in ("front", "rear"):
-            raise ValueError("which must be 'front' or 'rear'")
+            self.logger.error("which must be 'front' or 'rear'")
 
         other = "rear" if which == "front" else "front"
 
@@ -185,7 +314,8 @@ class TOF_Sensor:
                 which, interval=interval, range_mode=range_mode, callback=callback
             )
 
-    #
+
+    # Clean up after use
     def cleanup(self):
         """Close any open sensors, disable pins, and clean up GPIO."""
         try:
@@ -210,13 +340,18 @@ class TOF_Sensor:
         pass
 
 
-"""
+# If run as main
 if __name__ == "__main__":
     sensor = ToFSensor()
     try:
-        TOF_Sensor(None)
-        print("TOF Sensor initialized and running.")
-    except KeyboardInterrupt:
-        print("Shutting down TOF Sensor...")
+        while True:
+            sensor.stream("front", interval=0.3)
+            time.sleep(1)
+            sensor.stop_stream()
+            time.sleep(1)
+            sensor.stream("rear", interval=0.3)
+            time.sleep(1)
+            sensor.stop_stream()
+            time.sleep(1)
     finally:
-        GPIO.cleanup()
+        sensor.cleanup()
