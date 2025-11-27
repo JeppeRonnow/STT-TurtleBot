@@ -75,29 +75,34 @@ class STT:
 
 
 class WakeWord:
-    def __init__(self, MODEL_PATH: str, SAMPLE_RATE: float, BLOCK_SIZE: float, THRESHOLD: float, DEBUG: bool):
+    def __init__(self, mqtt_class, MODEL_PATH: str, SAMPLE_RATE: float, BLOCK_SIZE: float, THRESHOLD: float, WAKE_WORD_COOLDOWN: float, DEBUG: bool):
+        self.mqtt = mqtt_class
         self.MODEL_PATH = MODEL_PATH
         self.THRESHOLD = THRESHOLD
         self.SAMPLE_RATE = SAMPLE_RATE
         self.BLOCK_SIZE = BLOCK_SIZE
-        self.COOLDOWN = 2.0
+        self.COOLDOWN = WAKE_WORD_COOLDOWN
         self.DEBUG = DEBUG
         
         self.last_detection = 0.0
         self.event = threading.Event()  
 
-        if self.DEBUG:
-            print(f"[WakeWord] Loading model from: {str(self.MODEL_PATH)}")
+        self.initialize_model()
+
+        if self.DEBUG: print("[WakeWord] Model loaded successfully.")
+
+
+    def initialize_model(self) -> None:
+        if self.DEBUG: print(f"[WakeWord] Loading model from: {str(self.MODEL_PATH)}")
 
         parrent = Path(__file__).resolve().parents[1]
-        path = parrent / self.MODEL_PATH
-        self.wakeWord = Model(
-                wakeword_model_paths=[str(path)],
-                enable_speex_noise_suppression=True
-            )
 
-        if self.DEBUG:
-            print("[WakeWord] Model loaded successfully.")
+        paths = [str(parrent / path) for path in self.MODEL_PATH]
+
+        self.wakeWord = Model(
+                wakeword_model_paths = paths,
+                enable_speex_noise_suppression = True
+            )
 
 
     def flag_is_set(self) -> bool:
@@ -120,9 +125,16 @@ class WakeWord:
         for name, score in scores.items():
             if self.DEBUG: print(f"Model: {name}, Score: {score:.6f}")
             if score >= self.THRESHOLD and (now - self.last_detection) > self.COOLDOWN:
-                self.event.set()
-                self.last_detection = now
-                if self.DEBUG: print("Wake word detected")
+                if name == "Turtlebot-2":
+                    self.event.set()
+                    self.last_detection = now
+                    if self.DEBUG: print("Wake word detected")
+                elif name == "Stop":
+                    self.mqtt.publish_command(0, 0)
+                    self.last_detection = now
+                    if self.DEBUG: print("Stop word detected")
+                else:
+                    if self.DEBUG: print(f"Unrecognized wake word: {name}")
 
 
     def await_wake_word(self) -> None:

@@ -27,8 +27,7 @@ class Logic:
 
 
     # Object init
-    def __init__(self, move_timer, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
-        self.PAUSE_ITTERATIONS = PAUSE_ITTERATIONS
+    def __init__(self, move_timer, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
         self.DEFAULT_TURN_DEG = DEFAULT_TURN_DEG
         self.DEFAULT_DISTANCE = DEFAULT_DISTANCE
         self.MOVE_VELOCITY = MOVE_VELOCITY
@@ -195,7 +194,7 @@ if __name__ == "__main__":
     # Configuration parameters
     config = Config() # Load config variables from YAML file
     mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)
-    logic = Logic(mqtt ,config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
+    logic = Logic(mqtt , config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
 
     # Load Whisper STT model
