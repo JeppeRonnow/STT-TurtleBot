@@ -106,7 +106,7 @@ def main():
         if thread.is_alive():
             print("Warning: Thread did not stop gracefully")
         
-        mqtt.close_connectio()
+        mqtt.close_connection()
         print("Script stopped successfully")
 
 

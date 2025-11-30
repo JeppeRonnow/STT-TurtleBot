@@ -48,7 +48,7 @@ class MQTT_Transmitter:
 
 
     # Closes connection to mqtt correct
-    def close_connectio(self):
+    def close_connection(self):
         self.publish_command(0.0, 0.0) # Make sure robot stops 
         self.client.loop_stop()
         self.client.disconnect()
