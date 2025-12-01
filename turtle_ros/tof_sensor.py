@@ -1,100 +1,170 @@
-import VL53L1X
-import signal
+import threading
 import time
-import sys
-import threading as thread
 import RPi.GPIO as GPIO
-import time
-
-class Matrix:
-    def __init__(self):
-        self.matrix = [[0.0 for _ in range(16)] for _ in range(16)]
-        print("Custom struct 'Matrix' initialized.")
-    
-    def __list__(self, row, col):
-        return self.matrix[row][col]
-    
-    def __str__(self):
-        print("\nMatrix Data:")
-        for row in self.matrix:
-            for col in row:
-                print(f"{col:.2f}", end=" ")
-        print("\n")
-
-class TOF_Sensor:
-    # Variables
-    I2C_BUS = 1
-    I2C_ADDR = 0x29
-    GRID_SIZE = 16                # 16x16 scan (consider 8 for speed)
-    THRESH_MM = 300               # 300 mm threshold
-    INTER_MEASUREMENT_MS = 20     # Sensor timing budget interplay; tune as needed
-    SLEEP_BETWEEN_ZONES = 0.0     # Small delay after set_user_roi (0–5 ms typically
-    STOP_THRESHOLD = 0.5  # distance in meters to trigger stop
-    LED_PIN = 18  # GPIO/BCM pin 18 (physical pin 12)
-   
-
-    def __init__(self):
-        print("Initializing TOF Sensor...")
-        # initialize the sensor first then start a new thread for detecting objects
-
-        self.matrix = Matrix()
-
-        GPIO.setmode(GPIO.BCM)    # or GPIO.BOARD for physical numbering
-        GPIO.setup(self.LED_PIN, GPIO.OUT)
-
-        self.blink_led()
-
-        self.floor_distance = self.get_floor_distance()
-        thread.Thread(target = self.object_detection).start()
-
-        print("[TOF Sensor initialized]")
+from VL53L1X import VL53L1X
 
 
-    def make_roi(top, left, bottom, right):
-        pass
+class ToFSensor:
+    def __init__(
+        self,
+        logger,
+        i2c_bus: int = 1,
+        boot_delay: float = 0.1,
+        settle: float = 0.3,
+        xshut_front: int = 17,
+        xshut_rear: int = 27
+    ):
+        self.logger = logger
+        self.i2c_bus = i2c_bus
+        self.boot_delay = boot_delay
+        self.settle = settle
+        self._pins = {"front": xshut_front, "rear": xshut_rear}
+
+        # Set unique sensor address
+        self.i2c_front_addr = 0x2A
+
+        # Storing sensor class
+        self._tofs = {"front": None, "rear": None}
+
+        # Set up threading needs
+        self._lock = threading.RLock()
+        self.collision_thread = None
+        self.collision_thread_flag = threading.Event()
+
+        # Set up GPIO for xshut used for start up
+        GPIO.setmode(GPIO.BCM)
+
+        for p in self._pins.values():
+            GPIO.setup(p, GPIO.OUT)
+            GPIO.output(p, GPIO.LOW)
+
+        time.sleep(self.boot_delay)
+
+        # Init the two sensors
+        self.init_sensor()
 
 
-    def get_floor_distance(self) -> float:
-        # return the distance to the floor from the sensor once on initialization
-        data = self.get_data()
-        return data(15,8)  # assuming the floor distance is at the center of the last row
+    # Start VL53L1X class
+    def init_sensor(self):
+        # Enable Front sensor
+        GPIO.output(self._pins["rear"], GPIO.LOW)
+        GPIO.output(self._pins["front"], GPIO.HIGH) # Power xshut for front sensor
+        time.sleep(self.boot_delay)
+
+        # Init front sensor
+        tof_front = VL53L1X(i2c_bus=1, i2c_address=0x29)
+        tof_front.open()
+        time.sleep(self.boot_delay)
+        self.logger.info("Front sensor initialized")
+
+        # Enable Rear sensor
+        GPIO.output(self._pins["front"], GPIO.LOW)
+        GPIO.output(self._pins["rear"], GPIO.HIGH)
+        time.sleep(self.boot_delay)
+
+        # Init sensor
+        tof_rear = VL53L1X(i2c_bus=1, i2c_address=0x29)
+        tof_rear.open()
+        self.logger.info("Rear sonsor initialized")
+
+        # Save tof classes
+        self._tofs["front"] = tof_front
+        self._tofs["rear"] = tof_rear
 
 
-    def get_data(self) -> Matrix:
-        return self.matrix # Change this to return actual sensor data
+    def get_distance(self, which):
+        with self._lock:
+            # Get sensor
+            tof = self._tofs.get(which)
+
+            # Check if sensor class is active
+            if not tof:
+                self.logger.error(f"Failed to get sensor '{which}'")
+                return None
+
+            else:
+                # Try to read data from tof sensor
+                try:
+                    distance = int(tof.get_distance())
+                    return distance if distance > 0 else None
+
+                except:
+                    self.logger.error(f"Failed to read distance on sensor '{which}'")
+                    return None
 
 
-    def stop_robot(self) -> None:
-        print("Object detected! Stopping the robot...")
-        # publish a zero velocity command to stop the robot
+    # Continuous sensor read in a blocking way
+    def stream(self, which, interval=0.3, callback=None):
+        # Clear flag
+        self.collision_thread_flag.clear()
+
+        self.enable(which)
+
+        try:
+            while True:
+                # Break if signaled to stop
+                if self.collision_thread_flag.is_set():
+                    break;
+
+                # Read distance from sensor
+                distance = self.get_distance(which)
+
+                if callback:
+                    callback(which, distance)
+                else:
+                    self.logger.info(f"{which}: {distance}mm")
+
+                # Check if distance is with in collision range
+                if distance is not None and distance < 100:
+                    return True
+
+                time.sleep(interval) # Wait for reading interval
+
+        except KeyboardInterrupt:
+            pass
 
 
-    def blink_led(self) -> None:
-        for _ in range(3):  # Blink 3 times on initialization
-            print("Blinking LED...")
-            GPIO.output(self.LED_PIN, GPIO.HIGH)
-            time.sleep(0.5)
-            GPIO.output(self.LED_PIN, GPIO.LOW)
-            time.sleep(0.5)
+    # Enable reading on desired sensor
+    def enable(self, which):
+        if which == "front":
+            self._tofs["rear"].stop_ranging()
+            GPIO.output(self._pins["rear"], GPIO.LOW)
+            GPIO.output(self._pins["front"], GPIO.HIGH)
+            time.sleep(0.05)
+            self._tofs["front"].start_ranging(1)
+
+        else:
+            self._tofs["front"].stop_ranging()
+            GPIO.output(self._pins["front"], GPIO.LOW)
+            GPIO.output(self._pins["rear"], GPIO.HIGH)
+            time.sleep(0.05)
+            self._tofs["rear"].start_ranging(1)
 
 
-    def object_detection(self):
-        # continuously monitor the sensor data for object detection
-        while True:
-            data = self.get_data()
-            for value in data: #only check top 4 rows
-                if value < self.STOP_THRESHOLD:
-                    self.stop_robot()
-            for value in data: #check floor distance
-                if value < self.floor_distance - 0.1: #if an object is detected closer than the floor distance minus a small margin
-                    self.stop_robot()
+    # Close a given sensor
+    def close_sensor(self, which):
+        with self._lock:
+            # Get tof class
+            tof = self._tofs.get(which)
+
+            # Check if tof class is active
+            if not tof:
+                self.logger.error(F"{which} is not active")
+                return
+
+            # Try to close tof sensor
+            try:
+                tof.stop_ranging()
+                tof.close()
+
+            except Exception:
+                self.logger.error(f"Failed to stop and close '{which}'")
+
+            # Clear sensor class
+            self._tofs[which] = None
 
 
-if __name__ == "__main__":
-    try:
-        TOF_Sensor()
-        print("TOF Sensor initialized and running.")
-    except KeyboardInterrupt:
-        print("Shutting down TOF Sensor...")
-    finally:
-        GPIO.cleanup()
+    # Close all sensors
+    def close_all(self):
+        self.close_sensor("front")
+        self.close_sensor("rear")
