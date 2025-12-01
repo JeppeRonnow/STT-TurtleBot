@@ -51,8 +51,8 @@ class MQTT_Transmitter:
                 print(f"Failed to connect to MQTT broker")
 
     # Closes connection to mqtt correct
-    def close_connectio(self):
-        self.publish_command(0.0, 0.0)  # Make sure robot stops
+    def close_connection(self):
+        self.publish_command(0.0, 0.0) # Make sure robot stops 
         self.client.loop_stop()
         self.client.disconnect()
         if self.DEBUG:
