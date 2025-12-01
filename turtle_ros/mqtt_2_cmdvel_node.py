@@ -5,7 +5,10 @@ import paho.mqtt.client as mqtt
 import json
 import threading
 
+
+import RPi.GPIO as GPIO 
 from  mqtt_2_cmd_pkg.pos_tracker import Pos_tracker
+
 
 BURGER_MAX_LIN_VEL = 0.22
 BURGER_MAX_ANG_VEL = 2.84
