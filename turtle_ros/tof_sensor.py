@@ -98,8 +98,6 @@ class ToFSensor:
         # Clear flag
         self.collision_thread_flag.clear()
 
-        self.enable(which)
-
         try:
             while True:
                 # Break if signaled to stop
@@ -125,8 +123,15 @@ class ToFSensor:
 
 
     # Enable reading on desired sensor
-    def enable(self, which):
-        if which == "front":
+    def enable(self, linear_vel):
+        # Check which sensor to enable
+        if linear_vel > 0.0:
+            direction = "front"
+        else:
+            direction = "rear"
+
+        # Enable desired sensor
+        if direction == "front":
             self._tofs["rear"].stop_ranging()
             GPIO.output(self._pins["rear"], GPIO.LOW)
             GPIO.output(self._pins["front"], GPIO.HIGH)

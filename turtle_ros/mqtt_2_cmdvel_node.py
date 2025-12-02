@@ -99,6 +99,9 @@ class MqttToCmdVelNode(Node):
             # Create a Twist message
             twist_msg = self.create_twist_msg(linear_vel, angular_vel)
 
+            # Switch collision sensor before we start moving
+            self.tof.enable(linear_vel)
+
             # Publish to cmd_vel topic
             self.publisher.publish(twist_msg)
             self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
@@ -169,11 +172,13 @@ class MqttToCmdVelNode(Node):
 
     # Is run as a thread from the on_message function
     def collision_detection(self, linear_vel):
+        # Chech direction to check for collision
         if linear_vel > 0.0:
             direction = "front"
         else:
             direction = "rear"
 
+        # Collision flag set when a collision is detected
         collision = False
 
         # Read sensor for collision
