@@ -1,0 +1,466 @@
+import customtkinter as ctk
+import matplotlib.patches as patches
+import numpy as np
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+
+
+class Dashboard(ctk.CTk):
+    def __init__(self):
+        super().__init__()
+
+        # Configure window
+        self.title("TurtleBot Dashboard")
+        self.geometry("1400x900")
+
+        # Set theme
+        ctk.set_appearance_mode("dark")
+        ctk.set_default_color_theme("blue")
+
+        # Configure grid layout (left panel wider than right)
+        self.grid_columnconfigure(0, weight=2)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # Create left panel for robot position
+        self.left_panel = ctk.CTkFrame(self, corner_radius=10)
+        self.left_panel.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+        # Configure left panel grid
+        self.left_panel.grid_rowconfigure(0, weight=0)  # Header
+        self.left_panel.grid_rowconfigure(1, weight=2)  # 2D visualization
+        self.left_panel.grid_rowconfigure(2, weight=1)  # Position data
+        self.left_panel.grid_columnconfigure(0, weight=1)
+
+        # Left panel header
+        self.position_label = ctk.CTkLabel(
+            self.left_panel,
+            text="Robot Position",
+            font=ctk.CTkFont(size=24, weight="bold"),
+        )
+        self.position_label.grid(row=0, column=0, padx=20, pady=20, sticky="ew")
+
+        # 2D Robot visualization frame
+        self.robot_viz_frame = ctk.CTkFrame(self.left_panel, corner_radius=10)
+        self.robot_viz_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="nsew")
+
+        # Create matplotlib figure for robot visualization
+        self.robot_figure = Figure(figsize=(5, 5), dpi=100)
+        self.robot_figure.patch.set_facecolor("#2b2b2b")
+        self.ax_robot = self.robot_figure.add_subplot(111)
+        self.ax_robot.set_facecolor("#1e1e1e")
+        self._style_axis(self.ax_robot)
+
+        # Set up grid (-5 to 5 meters, origin at center)
+        self.ax_robot.set_xlim(-5, 5)
+        self.ax_robot.set_ylim(-5, 5)
+        self.ax_robot.set_xlabel("X (m)", color="white")
+        self.ax_robot.set_ylabel("Y (m)", color="white")
+        self.ax_robot.grid(True, alpha=0.3, color="white", linewidth=0.5)
+        self.ax_robot.set_aspect("equal")
+
+        # Adjust layout to maximize plot area
+        self.robot_figure.tight_layout(pad=0.5)
+
+        # Draw start marker at origin
+        self.ax_robot.plot(0, 0, "g+", markersize=15, markeredgewidth=2, label="Origin")
+
+        # Initialize robot position at origin
+        self.robot_x = 0.0
+        self.robot_y = 0.0
+        self.robot_theta = 0.0
+
+        # Draw robot as a circle with front indicator
+        self.robot_circle, self.robot_indicator = self._create_robot_circle(0.0, 0.0, 0)
+        self.ax_robot.add_patch(self.robot_circle)
+        (self.robot_indicator_line,) = self.ax_robot.plot(
+            self.robot_indicator[0],
+            self.robot_indicator[1],
+            "r-",
+            linewidth=3,
+        )
+
+        # Draw trajectory line
+        self.trajectory_x = [0]
+        self.trajectory_y = [0]
+        (self.trajectory_line,) = self.ax_robot.plot(
+            self.trajectory_x,
+            self.trajectory_y,
+            "b-",
+            alpha=0.5,
+            linewidth=1,
+            label="Path",
+        )
+
+        self.ax_robot.legend(
+            loc="upper right",
+            facecolor="#2b2b2b",
+            edgecolor="white",
+            labelcolor="white",
+            fontsize=8,
+        )
+
+        # Create canvas for robot visualization
+        self.robot_canvas = FigureCanvasTkAgg(
+            self.robot_figure, master=self.robot_viz_frame
+        )
+        self.robot_canvas.draw()
+        self.robot_canvas.get_tk_widget().pack(
+            fill="both", expand=True, padx=10, pady=10
+        )
+
+        # Robot position display frame
+        self.position_frame = ctk.CTkFrame(self.left_panel, corner_radius=10)
+        self.position_frame.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
+
+        # Position data labels
+        self.x_label = ctk.CTkLabel(
+            self.position_frame,
+            text="X: 0.00 m",
+            font=ctk.CTkFont(size=20),
+        )
+        self.x_label.pack(padx=20, pady=(30, 10))
+
+        self.y_label = ctk.CTkLabel(
+            self.position_frame,
+            text="Y: 0.00 m",
+            font=ctk.CTkFont(size=20),
+        )
+        self.y_label.pack(padx=20, pady=10)
+
+        self.theta_label = ctk.CTkLabel(
+            self.position_frame,
+            text="Theta: 0.00°",
+            font=ctk.CTkFont(size=20),
+        )
+        self.theta_label.pack(padx=20, pady=10)
+
+        self.velocity_label = ctk.CTkLabel(
+            self.position_frame,
+            text="Velocity: 0.00 m/s",
+            font=ctk.CTkFont(size=20),
+        )
+        self.velocity_label.pack(padx=20, pady=10)
+
+        self.status_label = ctk.CTkLabel(
+            self.position_frame,
+            text="Status: Idle",
+            font=ctk.CTkFont(size=20),
+            text_color="#4CAF50",
+        )
+        self.status_label.pack(padx=20, pady=(10, 30))
+
+        # Create right panel for plots
+        self.right_panel = ctk.CTkFrame(self, corner_radius=10)
+        self.right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+
+        # Configure right panel grid (2 rows for 2 plots)
+        self.right_panel.grid_rowconfigure(0, weight=1)
+        self.right_panel.grid_rowconfigure(1, weight=1)
+        self.right_panel.grid_columnconfigure(0, weight=1)
+
+        # Create matplotlib figure with 2 subplots
+        self.figure = Figure(figsize=(6, 8), dpi=100)
+        self.figure.patch.set_facecolor("#2b2b2b")
+
+        # LDR Plot (top)
+        self.ax_ldr = self.figure.add_subplot(211)
+        self.ax_ldr.set_facecolor("#1e1e1e")
+        self._style_axis(self.ax_ldr)
+        self.ax_ldr.set_title("LDR Sensor Data", color="white", fontsize=12)
+        self.ax_ldr.set_xlabel("Time (s)", color="white")
+        self.ax_ldr.set_ylabel("Distance (mm)", color="white")
+        self.ax_ldr.set_ylim(0, 3000)  # Fixed Y-axis range for distance in mm
+        self.ax_ldr.grid(True, alpha=0.3, color="white")
+
+        # Initialize LDR plot with sample data
+        self.ldr_time = np.linspace(0, 10, 100)
+        self.ldr_data = np.random.rand(100) * 500  # Distance in mm
+        (self.ldr_line,) = self.ax_ldr.plot(
+            self.ldr_time, self.ldr_data, color="#FF9800", linewidth=2, label="LDR"
+        )
+        self.ax_ldr.legend(
+            loc="upper right",
+            facecolor="#2b2b2b",
+            edgecolor="white",
+            labelcolor="white",
+        )
+
+        # Mic Input Plot (bottom)
+        self.ax_mic = self.figure.add_subplot(212)
+        self.ax_mic.set_facecolor("#1e1e1e")
+        self._style_axis(self.ax_mic)
+        self.ax_mic.set_title(
+            "Microphone Input (Live vs Filtered)", color="white", fontsize=12
+        )
+        self.ax_mic.set_xlabel("Time (s)", color="white")
+        self.ax_mic.set_ylabel("Amplitude", color="white")
+        self.ax_mic.set_ylim(-1.5, 1.5)  # Fixed Y-axis range
+        self.ax_mic.grid(True, alpha=0.3, color="white")
+
+        # Initialize Mic plot with sample data
+        self.mic_time = np.linspace(0, 1, 1000)
+        self.live_audio = np.sin(2 * np.pi * 5 * self.mic_time) + 0.2 * np.random.randn(
+            1000
+        )
+        self.filtered_audio = np.sin(2 * np.pi * 5 * self.mic_time)
+        (self.live_line,) = self.ax_mic.plot(
+            self.mic_time,
+            self.live_audio,
+            color="#2196F3",
+            linewidth=1,
+            alpha=0.7,
+            label="Live Audio",
+        )
+        (self.filtered_line,) = self.ax_mic.plot(
+            self.mic_time,
+            self.filtered_audio,
+            color="#4CAF50",
+            linewidth=2,
+            label="Filtered Audio",
+        )
+        self.ax_mic.legend(
+            loc="upper right",
+            facecolor="#2b2b2b",
+            edgecolor="white",
+            labelcolor="white",
+        )
+
+        # Adjust spacing between subplots
+        self.figure.tight_layout(pad=3.0)
+
+        # Create canvas and add to right panel
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.right_panel)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().grid(
+            row=0, column=0, rowspan=2, padx=10, pady=10, sticky="nsew"
+        )
+
+        # Create stop button in absolute top right corner
+        self.stop_button = ctk.CTkButton(
+            self,
+            text="STOP",
+            font=ctk.CTkFont(size=18, weight="bold"),
+            fg_color="#F44336",
+            hover_color="#D32F2F",
+            width=120,
+            height=50,
+            command=self.emergency_stop,
+        )
+        self.stop_button.place(relx=1.0, rely=0.0, x=-15, y=15, anchor="ne")
+
+    def _style_axis(self, ax):
+        """Apply consistent dark theme styling to an axis"""
+        ax.spines["bottom"].set_color("white")
+        ax.spines["top"].set_color("white")
+        ax.spines["left"].set_color("white")
+        ax.spines["right"].set_color("white")
+        ax.tick_params(colors="white")
+        ax.xaxis.label.set_color("white")
+        ax.yaxis.label.set_color("white")
+        ax.title.set_color("white")
+
+    def _create_robot_circle(self, x, y, theta_deg):
+        """Create a circle with front indicator representing the robot"""
+        # Robot size
+        radius = 0.3
+
+        # Convert theta to radians
+        theta_rad = np.radians(theta_deg)
+
+        # Create circle
+        circle = patches.Circle(
+            (x, y),
+            radius,
+            facecolor="#2196F3",
+            edgecolor="white",
+            linewidth=2,
+        )
+
+        # Create front indicator line
+        indicator_x = [x, x + radius * np.sin(theta_rad)]
+        indicator_y = [y, y + radius * np.cos(theta_rad)]
+
+        return circle, (indicator_x, indicator_y)
+
+    def emergency_stop(self):
+        """Handle emergency stop button press"""
+        print("STOP")
+
+    def update_robot_position(self, x, y, theta, velocity=None, status=None):
+        """
+        Update robot position display
+
+        Args:
+            x: X position in meters
+            y: Y position in meters
+            theta: Orientation in degrees
+            velocity: Optional velocity in m/s
+            status: Optional status string
+        """
+        self.x_label.configure(text=f"X: {x:.2f} m")
+        self.y_label.configure(text=f"Y: {y:.2f} m")
+        self.theta_label.configure(text=f"Theta: {theta:.2f}°")
+
+        if velocity is not None:
+            self.velocity_label.configure(text=f"Velocity: {velocity:.2f} m/s")
+
+        if status is not None:
+            # Color code status
+            color = "#4CAF50"  # Green for Idle/OK
+            if status.lower() in ["moving", "active"]:
+                color = "#2196F3"  # Blue for moving
+            elif status.lower() in ["error", "stopped"]:
+                color = "#F44336"  # Red for error
+
+            self.status_label.configure(text=f"Status: {status}", text_color=color)
+
+        # Update 2D visualization
+        self._update_robot_visualization(x, y, theta)
+
+        # Clear trajectory if robot is at origin (home)
+        if abs(x) < 0.1 and abs(y) < 0.1:
+            self.trajectory_x = [0]
+            self.trajectory_y = [0]
+            self.trajectory_line.set_xdata(self.trajectory_x)
+            self.trajectory_line.set_ydata(self.trajectory_y)
+
+    def _update_robot_visualization(self, x, y, theta):
+        """Update the 2D robot visualization"""
+        # Update robot position (coordinates match grid directly)
+        self.robot_x = x
+        self.robot_y = y
+        self.robot_theta = theta
+
+        # Dynamic zoom: calculate required limits based on trajectory path
+        margin = 1.0  # Minimum margin from edge
+        min_range = 5.0  # Minimum range to display
+
+        # Calculate max extent of trajectory
+        if len(self.trajectory_x) > 1:
+            max_x = max(abs(max(self.trajectory_x)), abs(min(self.trajectory_x)))
+            max_y = max(abs(max(self.trajectory_y)), abs(min(self.trajectory_y)))
+            max_extent = max(max_x, max_y)
+        else:
+            max_extent = 0
+
+        # Calculate required range (use larger of min_range or trajectory extent + margin)
+        required_range = max(min_range, max_extent + margin)
+
+        # Get current limits
+        current_xlim = self.ax_robot.get_xlim()
+        current_range = abs(current_xlim[1])
+
+        # Apply same range to both axes to maintain 1:1 ratio
+        if required_range != current_range:
+            self.ax_robot.set_xlim(-required_range, required_range)
+            self.ax_robot.set_ylim(-required_range, required_range)
+
+        # Remove old robot circle
+        self.robot_circle.remove()
+
+        # Create new robot circle at new position
+        self.robot_circle, indicator = self._create_robot_circle(x, y, theta)
+        self.ax_robot.add_patch(self.robot_circle)
+
+        # Update front indicator line
+        self.robot_indicator_line.set_xdata(indicator[0])
+        self.robot_indicator_line.set_ydata(indicator[1])
+
+        # Update trajectory (keep last 100 points)
+        self.trajectory_x.append(x)
+        self.trajectory_y.append(y)
+        if len(self.trajectory_x) > 100:
+            self.trajectory_x.pop(0)
+            self.trajectory_y.pop(0)
+
+        self.trajectory_line.set_xdata(self.trajectory_x)
+        self.trajectory_line.set_ydata(self.trajectory_y)
+
+        # Redraw canvas
+        self.robot_canvas.draw_idle()
+
+    def update_ldr_plot(self, time_data, ldr_values):
+        """
+        Update LDR plot with new data
+
+        Args:
+            time_data: Array of time values
+            ldr_values: Array of LDR sensor values
+        """
+        self.ldr_line.set_xdata(time_data)
+        self.ldr_line.set_ydata(ldr_values)
+        self.ax_ldr.relim()
+        self.ax_ldr.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
+        self.canvas.draw_idle()
+
+    def update_mic_plot(self, time_data, live_audio, filtered_audio):
+        """
+        Update microphone plot with live and filtered audio
+
+        Args:
+            time_data: Array of time values
+            live_audio: Array of live audio samples
+            filtered_audio: Array of filtered audio samples
+        """
+        self.live_line.set_xdata(time_data)
+        self.live_line.set_ydata(live_audio)
+        self.filtered_line.set_xdata(time_data)
+        self.filtered_line.set_ydata(filtered_audio)
+        self.ax_mic.relim()
+        self.ax_mic.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
+        self.canvas.draw_idle()
+
+
+if __name__ == "__main__":
+    # Test the GUI
+    app = Dashboard()
+
+    # Test counter for animations
+    test_counter = [0]
+
+    def test_update():
+        """Test function to simulate live data updates"""
+        t = test_counter[0]
+
+        # Update robot position with simulated movement (8 meters up and back to trigger zoom)
+        # Move 8 meters up, then 8 meters back in a cycle
+        cycle_length = 80  # Total steps for one complete cycle
+        position_in_cycle = t % cycle_length
+
+        if position_in_cycle < 40:  # Moving up
+            y = (position_in_cycle / 40) * 8  # 0 to 8 meters on display
+            velocity = 0.2
+            status = "Moving Forward"
+            theta = 0  # Pointing up
+        else:  # Moving back
+            y = 8.0 - ((position_in_cycle - 40) / 40) * 8  # 8 to 0 meters on display
+            velocity = -0.2  # Negative velocity to indicate reverse
+            status = "Moving Backward"
+            theta = 0  # Keep pointing up (front doesn't change when reversing)
+
+        x = 0.0  # Stay at origin horizontally
+        app.update_robot_position(x, y, theta, velocity, status)
+
+        # Update LDR plot with simulated sensor data (distance in mm)
+        ldr_time = np.linspace(0, 10, 100)
+        ldr_data = 250 + 100 * np.sin(ldr_time + t * 0.1) + 20 * np.random.randn(100)
+        app.update_ldr_plot(ldr_time, ldr_data)
+
+        # Update Mic plot with simulated audio
+        mic_time = np.linspace(0, 1, 1000)
+        live_audio = np.sin(2 * np.pi * 5 * mic_time + t * 0.1) + 0.2 * np.random.randn(
+            1000
+        )
+        filtered_audio = np.sin(2 * np.pi * 5 * mic_time + t * 0.1)
+        app.update_mic_plot(mic_time, live_audio, filtered_audio)
+
+        test_counter[0] += 1
+
+        # Schedule next update
+        app.after(100, test_update)
+
+    # Start test updates after 500ms
+    app.after(500, test_update)
+
+    app.mainloop()
