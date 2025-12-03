@@ -7,8 +7,11 @@ from matplotlib.figure import Figure
 
 
 class Dashboard(ctk.CTk):
-    def __init__(self):
+    def __init__(self, mqtt_transmitter=None):
         super().__init__()
+
+        # Store MQTT transmitter reference for sending commands
+        self.mqtt_transmitter = mqtt_transmitter
 
         # Configure window
         self.title("TurtleBot Dashboard")
@@ -17,7 +20,7 @@ class Dashboard(ctk.CTk):
         # Set theme
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
-        
+
         # Robot state variables for movement simulation
         self.robot_x = 0.0
         self.robot_y = 0.0
@@ -291,23 +294,32 @@ class Dashboard(ctk.CTk):
 
     def emergency_stop(self):
         """Handle emergency stop button press"""
-        print("STOP")
+        print("STOP button pressed")
+
+        # Send stop command (0 velocity) to robot via MQTT
+        if self.mqtt_transmitter:
+            self.mqtt_transmitter.publish_command(0.0, 0.0)
+        else:
+            print("Warning: No MQTT transmitter available")
+
+        # Also stop any ongoing animation
+        self.update_robot_velocity(0.0, 0.0)
 
     def update_robot_velocity(self, linear, angular):
         """
         Update robot velocity and start/stop movement animation
-        
+
         Args:
             linear: Linear velocity in m/s
             angular: Angular velocity in rad/s
         """
         self.current_linear = linear
         self.current_angular = angular
-        
+
         # Determine if robot should be moving
         was_moving = self.is_moving
         self.is_moving = (abs(linear) > 0.001 or abs(angular) > 0.001)
-        
+
         # Update status display
         if self.is_moving:
             status = "Moving"
@@ -315,10 +327,10 @@ class Dashboard(ctk.CTk):
         else:
             status = "Idle"
             color = "#4CAF50"  # Green
-        
+
         self.status_label.configure(text=f"Status: {status}", text_color=color)
         self.velocity_label.configure(text=f"Velocity: {abs(linear):.2f} m/s")
-        
+
         # Start animation if not already running
         if self.is_moving and not was_moving:
             self.last_update_time = time.time()
@@ -327,47 +339,47 @@ class Dashboard(ctk.CTk):
             # Stop animation
             self.after_cancel(self.animation_timer)
             self.animation_timer = None
-    
+
     def _animate_movement(self):
         """Animate robot movement based on current velocities"""
         if not self.is_moving:
             return
-        
+
         # Calculate time delta
         current_time = time.time()
         dt = current_time - self.last_update_time
         self.last_update_time = current_time
-        
+
         # Update robot position based on velocities
         # Linear velocity moves in direction of current theta
         # theta=0 means pointing up (positive Y), theta increases counter-clockwise
         theta_rad = np.radians(self.robot_theta)
         dx = self.current_linear * np.sin(theta_rad) * dt
         dy = self.current_linear * np.cos(theta_rad) * dt
-        
+
         # Angular velocity changes theta
         # Positive angular velocity = counter-clockwise (left turn)
         dtheta = -np.degrees(self.current_angular) * dt
-        
+
         # Update position
         self.robot_x += dx
         self.robot_y += dy
         self.robot_theta += dtheta
-        
+
         # Normalize theta to [-180, 180]
         while self.robot_theta > 180:
             self.robot_theta -= 360
         while self.robot_theta < -180:
             self.robot_theta += 360
-        
+
         # Update display
         self.x_label.configure(text=f"X: {self.robot_x:.2f} m")
         self.y_label.configure(text=f"Y: {self.robot_y:.2f} m")
         self.theta_label.configure(text=f"Theta: {self.robot_theta:.2f}°")
-        
+
         # Update visualization
         self._update_robot_visualization(self.robot_x, self.robot_y, self.robot_theta)
-        
+
         # Schedule next update (60 FPS)
         self.animation_timer = self.after(16, self._animate_movement)
 
@@ -385,7 +397,7 @@ class Dashboard(ctk.CTk):
         self.robot_x = x
         self.robot_y = y
         self.robot_theta = theta
-        
+
         self.x_label.configure(text=f"X: {x:.2f} m")
         self.y_label.configure(text=f"Y: {y:.2f} m")
         self.theta_label.configure(text=f"Theta: {theta:.2f}°")

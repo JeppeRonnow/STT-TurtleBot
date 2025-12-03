@@ -82,8 +82,8 @@ def main():
     # Load Whisper model
     model = whisper.load_model()
     
-    # Create Dashboard first
-    app = Dashboard()
+    # Create Dashboard first with MQTT transmitter reference
+    app = Dashboard(mqtt_transmitter=mqtt)
     
     # Initialize MQTT Receiver with dashboard reference
     reciever = MQTT_Receiver(config.SERVER, config.DEBUG, app)
