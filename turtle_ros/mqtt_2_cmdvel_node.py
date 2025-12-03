@@ -185,7 +185,7 @@ class MqttToCmdVelNode(Node):
         # Setup thread to run the return method and start it
         self.Pos_tracker.return_thread = threading.Thread(
             target=self.Pos_tracker.return_to_start,
-            args=(self.publisher,),
+            args=(self.publisher, self.mqtt_transmit),
             daemon=True
         )
         self.Pos_tracker.return_thread.start()
@@ -193,6 +193,10 @@ class MqttToCmdVelNode(Node):
 
     # Start thread for collision detection
     def start_collision_detection(self, linear_vel):
+        # IF robot is not moving forwards or backwards no need for collision detection.
+        if linear_vel == 0.0: return
+
+        # Set up collision thread
         self.tof.collision_thread = threading.Thread(
             target=self.collision_detection,
             args=(linear_vel,),
