@@ -77,7 +77,7 @@ class MqttToCmdVelNode(Node):
 
 
     # When connecting to MQTT broker
-    def on_connect(self, client, userdata, falgs, rc):
+    def on_connect(self, client, userdata, falgs, rc, properties=None):
         if rc == 0:
             self.get_logger().info("Connect to MQTT broker succesfully")
         else:
