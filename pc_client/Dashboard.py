@@ -172,23 +172,23 @@ class Dashboard(ctk.CTk):
         self.figure = Figure(figsize=(6, 8), dpi=100)
         self.figure.patch.set_facecolor("#2b2b2b")
 
-        # LDR Plot (top)
-        self.ax_ldr = self.figure.add_subplot(211)
-        self.ax_ldr.set_facecolor("#1e1e1e")
-        self._style_axis(self.ax_ldr)
-        self.ax_ldr.set_title("LDR Sensor Data", color="white", fontsize=12)
-        self.ax_ldr.set_xlabel("Time (s)", color="white")
-        self.ax_ldr.set_ylabel("Distance (mm)", color="white")
-        self.ax_ldr.set_ylim(0, 3000)  # Fixed Y-axis range for distance in mm
-        self.ax_ldr.grid(True, alpha=0.3, color="white")
+        # TOF Plot (top)
+        self.ax_tof = self.figure.add_subplot(211)
+        self.ax_tof.set_facecolor("#1e1e1e")
+        self._style_axis(self.ax_tof)
+        self.ax_tof.set_title("TOF Sensor Data", color="white", fontsize=12)
+        self.ax_tof.set_xlabel("Time (s)", color="white")
+        self.ax_tof.set_ylabel("Distance (mm)", color="white")
+        self.ax_tof.set_ylim(0, 3000)  # Fixed Y-axis range for distance in mm
+        self.ax_tof.grid(True, alpha=0.3, color="white")
 
-        # Initialize LDR plot with sample data
-        self.ldr_time = np.linspace(0, 10, 100)
-        self.ldr_data = np.random.rand(100) * 500  # Distance in mm
-        (self.ldr_line,) = self.ax_ldr.plot(
-            self.ldr_time, self.ldr_data, color="#FF9800", linewidth=2, label="LDR"
+        # Initialize TOF plot with sample data
+        self.tof_time = np.linspace(0, 10, 100)
+        self.tof_data = np.random.rand(100) * 500  # Distance in mm
+        (self.tof_line,) = self.ax_tof.plot(
+            self.tof_time, self.tof_data, color="#FF9800", linewidth=2, label="TOF"
         )
-        self.ax_ldr.legend(
+        self.ax_tof.legend(
             loc="upper right",
             facecolor="#2b2b2b",
             edgecolor="white",
@@ -480,18 +480,18 @@ class Dashboard(ctk.CTk):
         # Redraw canvas
         self.robot_canvas.draw_idle()
 
-    def update_ldr_plot(self, time_data, ldr_values):
+    def update_tof_plot(self, time_data, tof_values):
         """
-        Update LDR plot with new data
+        Update TOF plot with new data
 
         Args:
             time_data: Array of time values
-            ldr_values: Array of LDR sensor values
+            tof_values: Array of TOF sensor values
         """
-        self.ldr_line.set_xdata(time_data)
-        self.ldr_line.set_ydata(ldr_values)
-        self.ax_ldr.relim()
-        self.ax_ldr.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
+        self.tof_line.set_xdata(time_data)
+        self.tof_line.set_ydata(tof_values)
+        self.ax_tof.relim()
+        self.ax_tof.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
         self.canvas.draw_idle()
 
     def update_mic_plot(self, time_data, live_audio, filtered_audio):
@@ -547,10 +547,10 @@ if __name__ == "__main__":
         # Update robot velocity (this will trigger the animation)
         app.update_robot_velocity(linear, angular)
 
-        # Update LDR plot with simulated sensor data (distance in mm)
-        ldr_time = np.linspace(0, 10, 100)
-        ldr_data = 250 + 100 * np.sin(ldr_time + t * 0.1) + 20 * np.random.randn(100)
-        app.update_ldr_plot(ldr_time, ldr_data)
+        # Update TOF plot with simulated sensor data (distance in mm)
+        tof_time = np.linspace(0, 10, 100)
+        tof_data = 250 + 100 * np.sin(tof_time + t * 0.1) + 20 * np.random.randn(100)
+        app.update_tof_plot(tof_time, tof_data)
 
         # Update Mic plot with simulated audio
         mic_time = np.linspace(0, 1, 1000)
