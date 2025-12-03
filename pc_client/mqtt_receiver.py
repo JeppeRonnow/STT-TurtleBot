@@ -7,9 +7,10 @@ class MQTT_Receiver:
     mqtt_port = 1883    # Port for mqtt broker
     mqtt_topic = "mqtt_gui"     # Topic for mqtt broker
     
-    def __init__(self, server, DEBUG):
+    def __init__(self, server, DEBUG, dashboard=None):
         self.mqtt_server = server   # Set IP of mqtt broker
         self.DEBUG = DEBUG
+        self.dashboard = dashboard  # Reference to Dashboard GUI
         
         # MQTT Client setup
         self.mqtt_client = mqtt.Client()
@@ -59,6 +60,10 @@ class MQTT_Receiver:
                 angular = float(payload['angular'])
 
                 if self.DEBUG: print(f"[MQTT RECIEVER] Received movement command - Linear: {linear}, Angular: {angular}")
+                
+                # Update dashboard if available
+                if self.dashboard:
+                    self.dashboard.update_robot_velocity(linear, angular)
             
             # Handle sensor data
             elif payload['type'] == "sensor":

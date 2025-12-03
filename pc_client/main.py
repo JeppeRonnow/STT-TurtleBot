@@ -82,8 +82,11 @@ def main():
     # Load Whisper model
     model = whisper.load_model()
     
-    # Initialize MQTT Receiver
-    reciever = MQTT_Receiver(config.SERVER, config.DEBUG)
+    # Create Dashboard first
+    app = Dashboard()
+    
+    # Initialize MQTT Receiver with dashboard reference
+    reciever = MQTT_Receiver(config.SERVER, config.DEBUG, app)
     
     # Start MQTT Receiver thread
     reciever.start()
@@ -103,7 +106,6 @@ def main():
 
     # Start GUI main loop
     try:
-        app = Dashboard()
         app.mainloop()
     except KeyboardInterrupt:
         print("\nCtrl+C pressed in main thread")
