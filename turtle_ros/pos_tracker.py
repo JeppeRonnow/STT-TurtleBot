@@ -14,13 +14,13 @@ class Pos_tracker:
         self.clock = clock
 
 
-    def return_to_start(self, publisher):
+    def return_to_start(self, publisher, mqtt_transmit):
         self.return_stop_flag.clear()
 
         while len(self.steps) > 1:
             if self.return_stop_flag.is_set():
                 break
-            
+
             # Debug Print
             self.logger.info(f"Current steps list = {len(self.steps)}.")
 
@@ -44,6 +44,9 @@ class Pos_tracker:
 
             # Publish twist_msg to cmd_vel and wait for drive_time
             publisher.publish(twist_msg)
+
+            # Send back information to gui
+            mqtt_transmit("movement", {"linear": twist_msg.twist.linear.x, "angular": twist_msg.twist.angular.z})
 
             # Remove instruction from list
             self.steps.pop()
