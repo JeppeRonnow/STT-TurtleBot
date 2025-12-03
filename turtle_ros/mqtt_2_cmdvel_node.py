@@ -127,11 +127,12 @@ class MqttToCmdVelNode(Node):
 
             # Send velocity information back to the GUI
             self.mqtt_transmit("movement", {"linear": linear_vel, "angular": angular_vel})
-            self.mqtt_transmit("sensor", {"direction": "front", "value": 1.23})
-            self.mqtt_transmit("sensor", {"direction": "rear", "value": 1.23})
+            # self.mqtt_transmit("sensor", {"direction": "front", "value": 1.23})
+            # self.mqtt_transmit("sensor", {"direction": "rear", "value": 1.23})
 
         except json.JSONDecodeError:
             self.get_logger().error("Failed to decode JSON from MQTT message.")
+
         except KeyError as e:
             self.get_logger().error(f"Missing except key in MQTT message: {e}")
 
