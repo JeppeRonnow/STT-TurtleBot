@@ -247,6 +247,9 @@ class MqttToCmdVelNode(Node):
             self.publisher.publish(twist_msg)
             self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
 
+            # Send stop cmd to gui
+            self.mqtt_transmit("movement", {"linear": 0.0, "angular": 0.0})
+
 
             # Check if the return thread is active and if active stop it
             self.stop_return_thread_if_active()
