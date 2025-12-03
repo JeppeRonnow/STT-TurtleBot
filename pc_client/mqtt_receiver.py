@@ -20,23 +20,32 @@ class MQTT_Receiver:
 
     
     def start(self):
-        # Connect to MQTT broker
-        self.mqtt_client.connect(self.mqtt_server, self.mqtt_port, 60)
+        try:
+            # Start the MQTT client loop in a non-blocking way (before connect)
+            self.mqtt_client.loop_start()
+            
+            # Connect to MQTT broker asynchronously
+            self.mqtt_client.connect_async(self.mqtt_server, self.mqtt_port, 60)
 
-        # Start the MQTT client loop in a non-blocking way
-        self.mqtt_client.loop_start()
-
-        # Subscribe to the MQTT topic
-        self.mqtt_client.subscribe(self.mqtt_topic)
-
-        if self.DEBUG: print(f"Subscribed to MQTT topic: {self.mqtt_topic}")
+            if self.DEBUG: print(f"Connecting to MQTT broker at {self.mqtt_server}:{self.mqtt_port}...")
+            if self.DEBUG: print(f"Will subscribe to MQTT topic: {self.mqtt_topic} on connect")
+        
+        except Exception as e:
+            if self.DEBUG: print(f"Error starting MQTT receiver: {e}")
 
 
     # When connecting to the MQTT broker
     def on_connect(self, client, userdata, falgs, rc):
         if self.DEBUG:
-            if rc == 0: print("Connected to MQTT broker succesfully")
-            else: print("Failed to connect to MQTT broker, return code %d", rc)
+            if rc == 0: 
+                print("Connected to MQTT broker succesfully")
+            else: 
+                print("Failed to connect to MQTT broker, return code %d", rc)
+        
+        # Subscribe to the MQTT topic after successful connection
+        if rc == 0:
+            self.mqtt_client.subscribe(self.mqtt_topic)
+            if self.DEBUG: print(f"Subscribed to MQTT topic: {self.mqtt_topic}")
    
 
     def on_message(self, client, userdata, msg):

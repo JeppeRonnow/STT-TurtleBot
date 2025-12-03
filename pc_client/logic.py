@@ -11,10 +11,10 @@ class Logic:
     fwd_syn = {"forward", "straight", "ahead"}
     back_syn = {"backward", "backwards", "reverse"}
 
-    numbers = {"one": 1, 
-               "two": 2, 
-               "three": 3, 
-               "four": 4, 
+    numbers = {"one": 1,
+               "two": 2,
+               "three": 3,
+               "four": 4,
                "five": 5,
                "six": 6,
                "seven": 7,
@@ -43,7 +43,7 @@ class Logic:
     def handle_transcription(self, words: List[str]) -> Tuple[Optional[str], int]:
         if not words:
             return None
-        
+
         words = self.format_numbers(words)
 
         for word in words:
@@ -51,12 +51,12 @@ class Logic:
             if word in self.stop_syn:
                 operation = "stop"
                 return operation
-            
+
             # Return
             if word in self.return_syn:
                 operation = "return"
                 return operation
-            
+
             # Turn left/right
             if word in self.turn_syn:
                 operation = "turn"
@@ -97,8 +97,8 @@ class Logic:
                     return payload
 
         return None
-    
-    
+
+
     def format_numbers(self, words: List[str]) -> List[str]:
         formatted_words = []
         for word in words:
@@ -141,7 +141,7 @@ class Logic:
         if len(args) == 2 and isinstance(args[0], str) and isinstance(args[1], float):
             if args[0] in ["left", "backward"]:
                 return f"{operation} -{args[1]}"
-            else: 
+            else:
                 return f"{operation} {args[1]}"
         raise TypeError("Invalid format_payload arguments")
 
@@ -172,18 +172,20 @@ class Logic:
 
         if payload[0] == "move" and payload[1]:
             val = float(payload[1])
-            
-            if val == 69.69 or val == -69.69:
-                return (self.MOVE_VELOCITY, 0.0) # Move forward 
-            
+
+            if val == 69.69:
+                return (self.MOVE_VELOCITY, 0.0) # Move forward
+            elif val == -69.69:
+                return (-self.MOVE_VELOCITY, 0.0) # Move backward
+
             else:
                 self.timer.set_timer(payload[0], val)
                 if val > 0:
                     return (self.MOVE_VELOCITY, 0.0)
                 return (-self.MOVE_VELOCITY, 0.0)
-        
+
         return (0.0, 0.0)
-    
+
 
 if __name__ == "__main__":
     from mqtt import MQTT_Transmitter
