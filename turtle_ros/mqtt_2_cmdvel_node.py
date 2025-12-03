@@ -66,6 +66,9 @@ class MqttToCmdVelNode(Node):
         # Init obstacle detection class
         self.tof = ToFSensor(self.get_logger())
 
+        # Create stop twist message for easy send.
+        self.stop_twist_msg = self.create_twist_msg(0.0, 0.0)
+
 
     # When connecting to MQTT broker
     def on_connect(self, client, userdata, falgs, rc):
@@ -81,6 +84,13 @@ class MqttToCmdVelNode(Node):
             # Assuming the MQTT message payload is a JSON with 'linear' and 'angualr' fields
             payload = json.loads(msg.payload.decode())
 
+            # Stop robot to avoid collisions when processing message
+            self.publisher.publish(self.stop_twist_msg)
+            self.get_logger().info("Stoped robot on message")
+
+            # Stop collision_thread
+            self.stop_collision_thread_if_active()
+
             # Check if comand is return
             if (payload['linear']['x'] == 69.69 and payload['angular']['z'] == 69.69):
                 self.start_return()
@@ -88,9 +98,6 @@ class MqttToCmdVelNode(Node):
 
             # Check if return is active
             self.stop_return_thread_if_active()
-
-            # Check if collision detection is active before we start a new thread
-            self.stop_collision_thread_if_active()
 
             # Check if meassage fit within constraints, and constrain if nescesarry
             linear_vel = check_linear_limit_velocity(payload['linear']['x'])
@@ -132,7 +139,7 @@ class MqttToCmdVelNode(Node):
         # Make sure robot is stationary and nescesarry for time calculation if return is called while robot is moveing
         twist_msg_stop = self.create_twist_msg(0.0, 0.0)
         self.Pos_tracker.save_step(twist_msg_stop)
-        
+
         # If return method is already running continue returning and wait for new msg
         if self.Pos_tracker.return_thread and self.Pos_tracker.return_thread.is_alive():
             return
@@ -155,6 +162,8 @@ class MqttToCmdVelNode(Node):
         )
         self.tof.collision_thread.start()
 
+        self.get_logger().info("Started collision thread")
+
 
     # Checks if the return_thread is active and stops it if it active
     def stop_return_thread_if_active(self):
@@ -168,6 +177,11 @@ class MqttToCmdVelNode(Node):
         if self.tof.collision_thread and self.tof.collision_thread.is_alive():
                 self.tof.collision_thread_flag.set()    # Set stop flag for collision_thread
                 self.tof.collision_thread.join()        # Wait for collision_thread to stop safely
+                self.get_logger().info("Stopped collision thread")
+                self.tof.collision_thread_flag.clear()
+                return
+
+        self.get_logger().info("Collision thread is not active")
 
 
     # Is run as a thread from the on_message function
