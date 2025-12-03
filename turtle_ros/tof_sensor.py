@@ -43,6 +43,9 @@ class ToFSensor:
         # Init the two sensors
         self.init_sensor()
 
+        # Used to keep track of direction
+        self. direction = ""
+
 
     # Start VL53L1X class
     def init_sensor(self):
@@ -71,7 +74,12 @@ class ToFSensor:
         self._tofs["front"] = tof_front
         self._tofs["rear"] = tof_rear
 
+        # Disable both sensors
+        GPIO.output(self._pins["front"], GPIO.LOW)
+        GPIO.output(self._pins["rear"], GPIO.LOW)
 
+
+    # Reads data from sensor
     def get_distance(self, which):
         with self._lock:
             # Get sensor
@@ -94,11 +102,9 @@ class ToFSensor:
 
 
     # Continuous sensor read in a blocking way
-    def stream(self, which, interval=0.3, callback=None):
+    def stream(self, which, interval=0.05, callback=None):
         # Clear flag
         self.collision_thread_flag.clear()
-
-        self.enable(which)
 
         try:
             while True:
@@ -115,7 +121,7 @@ class ToFSensor:
                     self.logger.info(f"{which}: {distance}mm")
 
                 # Check if distance is with in collision range
-                if distance is not None and distance < 100:
+                if distance is not None and distance < 300:
                     return True
 
                 time.sleep(interval) # Wait for reading interval
@@ -125,8 +131,23 @@ class ToFSensor:
 
 
     # Enable reading on desired sensor
-    def enable(self, which):
-        if which == "front":
+    def enable(self, linear_vel):
+        # Check which sensor to enable
+        if linear_vel > 0.0:
+            direction = "front"
+        else:
+            direction = "rear"
+
+        # Check if direction is already set
+        if self.direction == direction:
+            return
+
+        # Save the new direction
+        self.direction = direction
+        self.logger.info(f"Switching to {direction} sensor")
+
+        # Enable desired sensor
+        if direction == "front":
             self._tofs["rear"].stop_ranging()
             GPIO.output(self._pins["rear"], GPIO.LOW)
             GPIO.output(self._pins["front"], GPIO.HIGH)
