@@ -201,7 +201,7 @@ class ToFSensor:
             # brief settle before stopping ranging
             time.sleep(0.05)
             roi = VL53L1X.VL53L1xUserRoi(
-                6, 9, 11, 15
+                6, 9, 15, 14
             )  # This is the reason for the change of "from VL53L1X import VL53L1X" to "import VL53L1X" -> to be able to update FoV on the sensor
             tof.stop_ranging()
             time.sleep(0.05)
