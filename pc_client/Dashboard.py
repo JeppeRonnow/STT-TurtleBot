@@ -209,39 +209,35 @@ class Dashboard(ctk.CTk):
         self.figure = Figure(figsize=(6, 4), dpi=100)
         self.figure.patch.set_facecolor("#2b2b2b")
 
-        # Mic Input Plot
+        # Audio Recordings Plot
         self.ax_mic = self.figure.add_subplot(111)
         self.ax_mic.set_facecolor("#1e1e1e")
         self._style_axis(self.ax_mic)
         self.ax_mic.set_title(
-            "Microphone Input (Live vs Filtered)", color="white", fontsize=12
+            "Audio Recordings (Raw vs Filtered)", color="white", fontsize=12
         )
         self.ax_mic.set_xlabel("Time (s)", color="white")
         self.ax_mic.set_ylabel("Amplitude", color="white")
-        self.ax_mic.set_ylim(-1.5, 1.5)  # Fixed Y-axis range
+        self.ax_mic.set_ylim(-1.0, 1.0)  # Linear amplitude range
+        self.ax_mic.set_xlim(0, 3)  # Default 3 seconds
         self.ax_mic.grid(True, alpha=0.3, color="white")
 
-        # Initialize Mic plot with sample data
-        self.mic_time = np.linspace(0, 1, 1000)
-        self.live_audio = np.sin(2 * np.pi * 5 * self.mic_time) + 0.2 * np.random.randn(
-            1000
+        # Initialize empty plot lines for 3 recordings
+        (self.raw_line,) = self.ax_mic.plot(
+            [], [],
+            color="#FF5722",
+            linewidth=1,
+            alpha=0.6,
+            label="Raw",
         )
-        self.filtered_audio = np.sin(2 * np.pi * 5 * self.mic_time)
-        (self.live_line,) = self.ax_mic.plot(
-            self.mic_time,
-            self.live_audio,
+        (self.filtered_line,) = self.ax_mic.plot(
+            [], [],
             color="#2196F3",
             linewidth=1,
             alpha=0.7,
-            label="Live Audio",
+            label="Filtered",
         )
-        (self.filtered_line,) = self.ax_mic.plot(
-            self.mic_time,
-            self.filtered_audio,
-            color="#4CAF50",
-            linewidth=2,
-            label="Filtered Audio",
-        )
+
         self.ax_mic.legend(
             loc="upper right",
             facecolor="#2b2b2b",
@@ -522,21 +518,27 @@ class Dashboard(ctk.CTk):
             else:
                 label.configure(text="", text_color="white")
 
-    def update_mic_plot(self, time_data, live_audio, filtered_audio):
+    def update_audio_recordings(self, raw_audio, raw_time, filtered_audio, filtered_time):
         """
-        Update microphone plot with live and filtered audio
+        Update audio plot with the 2 saved recordings
 
         Args:
-            time_data: Array of time values
-            live_audio: Array of live audio samples
-            filtered_audio: Array of filtered audio samples
+            raw_audio: Raw audio array
+            raw_time: Time array for raw audio
+            filtered_audio: Filtered audio array
+            filtered_time: Time array for filtered audio
         """
-        self.live_line.set_xdata(time_data)
-        self.live_line.set_ydata(live_audio)
-        self.filtered_line.set_xdata(time_data)
+        # Update both lines with linear amplitude
+        self.raw_line.set_xdata(raw_time)
+        self.raw_line.set_ydata(raw_audio)
+        self.filtered_line.set_xdata(filtered_time)
         self.filtered_line.set_ydata(filtered_audio)
+        
+        # Auto-scale axes
         self.ax_mic.relim()
-        self.ax_mic.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
+        self.ax_mic.autoscale_view(scalex=True, scaley=True)
+        
+        # Redraw canvas
         self.canvas.draw_idle()
 
 
@@ -577,14 +579,6 @@ if __name__ == "__main__":
 
         # Update Command History with current velocities
         app.update_command_history(linear, angular)
-
-        # Update Mic plot with simulated audio
-        mic_time = np.linspace(0, 1, 1000)
-        live_audio = np.sin(2 * np.pi * 5 * mic_time + t * 0.1) + 0.2 * np.random.randn(
-            1000
-        )
-        filtered_audio = np.sin(2 * np.pi * 5 * mic_time + t * 0.1)
-        app.update_mic_plot(mic_time, live_audio, filtered_audio)
 
         test_counter[0] += 1
 

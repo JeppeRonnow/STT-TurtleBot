@@ -14,7 +14,7 @@ import numpy as np
 import queue
 import time
 # robot control thread
-def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model):
+def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, dashboard):
     print("[Thread] Robot controller started on thread:", threading.current_thread().name)
 
     while running_flag[0]:
@@ -33,6 +33,11 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
             # Normalize lightly to (-1,1)
             normalized = filter.normalize(filtered)
             audio.save_audio(normalized, "Normalized.wav")
+            
+            # Update dashboard with audio recordings
+            raw_time = np.arange(len(raw)) / config.SAMPLE_RATE
+            filtered_time = np.arange(len(filtered)) / config.SAMPLE_RATE
+            dashboard.update_audio_recordings(raw, raw_time, filtered, filtered_time)
 
             # Run STT and update token buffer
             whisper.transcribe(model, normalized)
@@ -97,7 +102,7 @@ def main():
     # Start robot control thread
     thread = threading.Thread(
         target=robot_loop,
-        args=(running, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model),
+        args=(running, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, app),
         name="RobotControllerThread",
         daemon=True
     )
