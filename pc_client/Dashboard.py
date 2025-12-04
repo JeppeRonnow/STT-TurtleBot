@@ -1,13 +1,17 @@
 import customtkinter as ctk
 import matplotlib.patches as patches
 import numpy as np
+import time
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 
 class Dashboard(ctk.CTk):
-    def __init__(self):
+    def __init__(self, mqtt_transmitter=None):
         super().__init__()
+
+        # Store MQTT transmitter reference for sending commands
+        self.mqtt_transmitter = mqtt_transmitter
 
         # Configure window
         self.title("TurtleBot Dashboard")
@@ -16,6 +20,16 @@ class Dashboard(ctk.CTk):
         # Set theme
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
+
+        # Robot state variables for movement simulation
+        self.robot_x = 0.0
+        self.robot_y = 0.0
+        self.robot_theta = 0.0
+        self.current_linear = 0.0
+        self.current_angular = 0.0
+        self.is_moving = False
+        self.animation_timer = None
+        self.last_update_time = time.time()
 
         # Configure grid layout (left panel wider than right)
         self.grid_columnconfigure(0, weight=2)
@@ -64,11 +78,6 @@ class Dashboard(ctk.CTk):
 
         # Draw start marker at origin
         self.ax_robot.plot(0, 0, "g+", markersize=15, markeredgewidth=2, label="Origin")
-
-        # Initialize robot position at origin
-        self.robot_x = 0.0
-        self.robot_y = 0.0
-        self.robot_theta = 0.0
 
         # Draw robot as a circle with front indicator
         self.robot_circle, self.robot_indicator = self._create_robot_circle(0.0, 0.0, 0)
@@ -163,23 +172,23 @@ class Dashboard(ctk.CTk):
         self.figure = Figure(figsize=(6, 8), dpi=100)
         self.figure.patch.set_facecolor("#2b2b2b")
 
-        # LDR Plot (top)
-        self.ax_ldr = self.figure.add_subplot(211)
-        self.ax_ldr.set_facecolor("#1e1e1e")
-        self._style_axis(self.ax_ldr)
-        self.ax_ldr.set_title("LDR Sensor Data", color="white", fontsize=12)
-        self.ax_ldr.set_xlabel("Time (s)", color="white")
-        self.ax_ldr.set_ylabel("Distance (mm)", color="white")
-        self.ax_ldr.set_ylim(0, 3000)  # Fixed Y-axis range for distance in mm
-        self.ax_ldr.grid(True, alpha=0.3, color="white")
+        # TOF Plot (top)
+        self.ax_tof = self.figure.add_subplot(211)
+        self.ax_tof.set_facecolor("#1e1e1e")
+        self._style_axis(self.ax_tof)
+        self.ax_tof.set_title("TOF Sensor Data", color="white", fontsize=12)
+        self.ax_tof.set_xlabel("Time (s)", color="white")
+        self.ax_tof.set_ylabel("Distance (mm)", color="white")
+        self.ax_tof.set_ylim(0, 3000)  # Fixed Y-axis range for distance in mm
+        self.ax_tof.grid(True, alpha=0.3, color="white")
 
-        # Initialize LDR plot with sample data
-        self.ldr_time = np.linspace(0, 10, 100)
-        self.ldr_data = np.random.rand(100) * 500  # Distance in mm
-        (self.ldr_line,) = self.ax_ldr.plot(
-            self.ldr_time, self.ldr_data, color="#FF9800", linewidth=2, label="LDR"
+        # Initialize TOF plot with sample data
+        self.tof_time = np.linspace(0, 10, 100)
+        self.tof_data = np.random.rand(100) * 500  # Distance in mm
+        (self.tof_line,) = self.ax_tof.plot(
+            self.tof_time, self.tof_data, color="#FF9800", linewidth=2, label="TOF"
         )
-        self.ax_ldr.legend(
+        self.ax_tof.legend(
             loc="upper right",
             facecolor="#2b2b2b",
             edgecolor="white",
@@ -285,11 +294,98 @@ class Dashboard(ctk.CTk):
 
     def emergency_stop(self):
         """Handle emergency stop button press"""
-        print("STOP")
+        print("STOP button pressed")
+
+        # Send stop command (0 velocity) to robot via MQTT
+        if self.mqtt_transmitter:
+            self.mqtt_transmitter.publish_command(0.0, 0.0)
+        else:
+            print("Warning: No MQTT transmitter available")
+
+        # Also stop any ongoing animation
+        self.update_robot_velocity(0.0, 0.0)
+
+    def update_robot_velocity(self, linear, angular):
+        """
+        Update robot velocity and start/stop movement animation
+
+        Args:
+            linear: Linear velocity in m/s
+            angular: Angular velocity in rad/s
+        """
+        self.current_linear = linear
+        self.current_angular = angular
+
+        # Determine if robot should be moving
+        was_moving = self.is_moving
+        self.is_moving = (abs(linear) > 0.001 or abs(angular) > 0.001)
+
+        # Update status display
+        if self.is_moving:
+            status = "Moving"
+            color = "#2196F3"  # Blue
+        else:
+            status = "Idle"
+            color = "#4CAF50"  # Green
+
+        self.status_label.configure(text=f"Status: {status}", text_color=color)
+        self.velocity_label.configure(text=f"Velocity: {abs(linear):.2f} m/s")
+
+        # Start animation if not already running
+        if self.is_moving and not was_moving:
+            self.last_update_time = time.time()
+            self._animate_movement()
+        elif not self.is_moving and self.animation_timer:
+            # Stop animation
+            self.after_cancel(self.animation_timer)
+            self.animation_timer = None
+
+    def _animate_movement(self):
+        """Animate robot movement based on current velocities"""
+        if not self.is_moving:
+            return
+
+        # Calculate time delta
+        current_time = time.time()
+        dt = current_time - self.last_update_time
+        self.last_update_time = current_time
+
+        # Update robot position based on velocities
+        # Linear velocity moves in direction of current theta
+        # theta=0 means pointing up (positive Y), theta increases counter-clockwise
+        theta_rad = np.radians(self.robot_theta)
+        dx = self.current_linear * np.sin(theta_rad) * dt
+        dy = self.current_linear * np.cos(theta_rad) * dt
+
+        # Angular velocity changes theta
+        # Positive angular velocity = counter-clockwise (left turn)
+        dtheta = -np.degrees(self.current_angular) * dt
+
+        # Update position
+        self.robot_x += dx
+        self.robot_y += dy
+        self.robot_theta += dtheta
+
+        # Normalize theta to [-180, 180]
+        while self.robot_theta > 180:
+            self.robot_theta -= 360
+        while self.robot_theta < -180:
+            self.robot_theta += 360
+
+        # Update display
+        self.x_label.configure(text=f"X: {self.robot_x:.2f} m")
+        self.y_label.configure(text=f"Y: {self.robot_y:.2f} m")
+        self.theta_label.configure(text=f"Theta: {self.robot_theta:.2f}°")
+
+        # Update visualization
+        self._update_robot_visualization(self.robot_x, self.robot_y, self.robot_theta)
+
+        # Schedule next update (60 FPS)
+        self.animation_timer = self.after(16, self._animate_movement)
 
     def update_robot_position(self, x, y, theta, velocity=None, status=None):
         """
-        Update robot position display
+        Update robot position display (for manual position updates)
 
         Args:
             x: X position in meters
@@ -298,6 +394,10 @@ class Dashboard(ctk.CTk):
             velocity: Optional velocity in m/s
             status: Optional status string
         """
+        self.robot_x = x
+        self.robot_y = y
+        self.robot_theta = theta
+
         self.x_label.configure(text=f"X: {x:.2f} m")
         self.y_label.configure(text=f"Y: {y:.2f} m")
         self.theta_label.configure(text=f"Theta: {theta:.2f}°")
@@ -380,18 +480,18 @@ class Dashboard(ctk.CTk):
         # Redraw canvas
         self.robot_canvas.draw_idle()
 
-    def update_ldr_plot(self, time_data, ldr_values):
+    def update_tof_plot(self, time_data, tof_values):
         """
-        Update LDR plot with new data
+        Update TOF plot with new data
 
         Args:
             time_data: Array of time values
-            ldr_values: Array of LDR sensor values
+            tof_values: Array of TOF sensor values
         """
-        self.ldr_line.set_xdata(time_data)
-        self.ldr_line.set_ydata(ldr_values)
-        self.ax_ldr.relim()
-        self.ax_ldr.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
+        self.tof_line.set_xdata(time_data)
+        self.tof_line.set_ydata(tof_values)
+        self.ax_tof.relim()
+        self.ax_tof.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
         self.canvas.draw_idle()
 
     def update_mic_plot(self, time_data, live_audio, filtered_audio):
@@ -420,32 +520,37 @@ if __name__ == "__main__":
     test_counter = [0]
 
     def test_update():
-        """Test function to simulate live data updates"""
+        """Test function to simulate live data updates and velocity-based movement"""
         t = test_counter[0]
 
-        # Update robot position with simulated movement (8 meters up and back to trigger zoom)
-        # Move 8 meters up, then 8 meters back in a cycle
-        cycle_length = 80  # Total steps for one complete cycle
+        # Test velocity-based movement animation
+        # Create a sequence: move forward, turn, move backward, stop, repeat
+        cycle_length = 200  # Total steps for one complete cycle
         position_in_cycle = t % cycle_length
 
-        if position_in_cycle < 40:  # Moving up
-            y = (position_in_cycle / 40) * 8  # 0 to 8 meters on display
-            velocity = 0.2
-            status = "Moving Forward"
-            theta = 0  # Pointing up
-        else:  # Moving back
-            y = 8.0 - ((position_in_cycle - 40) / 40) * 8  # 8 to 0 meters on display
-            velocity = -0.2  # Negative velocity to indicate reverse
-            status = "Moving Backward"
-            theta = 0  # Keep pointing up (front doesn't change when reversing)
+        if position_in_cycle < 50:  # Moving forward
+            linear = 0.2
+            angular = 0.0
+        elif position_in_cycle < 75:  # Turning
+            linear = 0.0
+            angular = 1.0  # rad/s
+        elif position_in_cycle < 125:  # Moving backward
+            linear = -0.15
+            angular = 0.0
+        elif position_in_cycle < 150:  # Turning other direction
+            linear = 0.0
+            angular = -1.0
+        else:  # Stopped
+            linear = 0.0
+            angular = 0.0
 
-        x = 0.0  # Stay at origin horizontally
-        app.update_robot_position(x, y, theta, velocity, status)
+        # Update robot velocity (this will trigger the animation)
+        app.update_robot_velocity(linear, angular)
 
-        # Update LDR plot with simulated sensor data (distance in mm)
-        ldr_time = np.linspace(0, 10, 100)
-        ldr_data = 250 + 100 * np.sin(ldr_time + t * 0.1) + 20 * np.random.randn(100)
-        app.update_ldr_plot(ldr_time, ldr_data)
+        # Update TOF plot with simulated sensor data (distance in mm)
+        tof_time = np.linspace(0, 10, 100)
+        tof_data = 250 + 100 * np.sin(tof_time + t * 0.1) + 20 * np.random.randn(100)
+        app.update_tof_plot(tof_time, tof_data)
 
         # Update Mic plot with simulated audio
         mic_time = np.linspace(0, 1, 1000)

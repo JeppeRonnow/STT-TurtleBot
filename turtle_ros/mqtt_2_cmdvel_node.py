@@ -45,6 +45,10 @@ class MqttToCmdVelNode(Node):
         self.mqtt_client.on_connect = self.on_connect
         self.mqtt_client.on_message = self.on_message
 
+        # Set up MQTT client to for GUI feedback
+        self.mqtt_gui_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        self.mqtt_gui_client.on_connect = self.on_connect
+
         # Define MQTT connection details
         mqtt_server = "127.0.0.1"
         mqtt_port = 1883
@@ -52,14 +56,16 @@ class MqttToCmdVelNode(Node):
 
         # Connect to the MQTT broker
         self.mqtt_client.connect(mqtt_server, mqtt_port, 60)
+        self.mqtt_gui_client.connect(mqtt_server, mqtt_port, 60)
 
         # Start the MQTT client loop in a non-blocking way
         self.mqtt_client.loop_start()
+        self.mqtt_gui_client.loop_start()
 
         # Subscribe to the MQTT topic
         self.mqtt_client.subscribe(mqtt_topic)
         self.get_logger().info(f"Subscribed to MQTT topic: {mqtt_topic}")
-        
+
         # Init Position tracking for robot to enable return for the robot
         self.Pos_tracker = Pos_tracker(self.get_logger(), self.get_clock()) # Tracks position of robot
 
@@ -71,7 +77,7 @@ class MqttToCmdVelNode(Node):
 
 
     # When connecting to MQTT broker
-    def on_connect(self, client, userdata, falgs, rc):
+    def on_connect(self, client, userdata, falgs, rc, properties=None):
         if rc == 0:
             self.get_logger().info("Connect to MQTT broker succesfully")
         else:
@@ -119,8 +125,14 @@ class MqttToCmdVelNode(Node):
             # Save Position.
             self.Pos_tracker.save_step(twist_msg) # Save velocities and time to list of steps
 
+            # Send velocity information back to the GUI
+            self.mqtt_transmit("movement", {"linear": linear_vel, "angular": angular_vel})
+            # self.mqtt_transmit("sensor", {"direction": "front", "value": 1.23})
+            # self.mqtt_transmit("sensor", {"direction": "rear", "value": 1.23})
+
         except json.JSONDecodeError:
             self.get_logger().error("Failed to decode JSON from MQTT message.")
+
         except KeyError as e:
             self.get_logger().error(f"Missing except key in MQTT message: {e}")
 
@@ -132,6 +144,32 @@ class MqttToCmdVelNode(Node):
         twist_msg.twist.linear.x = float(linear_vel)
         twist_msg.twist.angular.z = float(angular_vel)
         return twist_msg
+
+
+    # Publishes data to MQTT topics
+    def mqtt_transmit(self, type: str, data: dict = None):
+        if data is None:
+            data = {}
+
+        payload = {"type": type}
+
+        if type == "movement":
+            payload["linear"] = data.get("linear", 0.0)
+            payload["angular"] = data.get("angular", 0.0)
+            topic = "mqtt_gui"
+
+        elif type == "sensor":
+            payload["direction"] = data.get("direction", "unknown")
+            payload["value"] = data.get("value", 0.0)
+            topic = "mqtt_gui"
+
+        else:
+            self.get_logger().warning(f"Unknown message type: {type}")
+            return
+
+        # Publish to MQTT
+        self.mqtt_gui_client.publish(topic, json.dumps(payload), qos=1)
+        self.get_logger().info(f"Published to {topic}: {payload}")
 
 
     # Starts the return of the robot
@@ -147,14 +185,18 @@ class MqttToCmdVelNode(Node):
         # Setup thread to run the return method and start it
         self.Pos_tracker.return_thread = threading.Thread(
             target=self.Pos_tracker.return_to_start,
-            args=(self.publisher,),
+            args=(self.publisher, self.mqtt_transmit),
             daemon=True
         )
         self.Pos_tracker.return_thread.start()
 
 
-    # Start thread for collision detection 
+    # Start thread for collision detection
     def start_collision_detection(self, linear_vel):
+        # IF robot is not moving forwards or backwards no need for collision detection.
+        if linear_vel == 0.0: return
+
+        # Set up collision thread
         self.tof.collision_thread = threading.Thread(
             target=self.collision_detection,
             args=(linear_vel,),
@@ -209,6 +251,9 @@ class MqttToCmdVelNode(Node):
             self.publisher.publish(twist_msg)
             self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
 
+            # Send stop cmd to gui
+            self.mqtt_transmit("movement", {"linear": 0.0, "angular": 0.0})
+
 
             # Check if the return thread is active and if active stop it
             self.stop_return_thread_if_active()
@@ -225,6 +270,7 @@ def main(args=None):
         pass
     finally:
         node.mqtt_client.loop_stop()
+        node.mqtt_gui_client.loop_stop()
         node.destroy_node()
         rclpy.shutdown()
 
