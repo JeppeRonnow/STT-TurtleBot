@@ -1,7 +1,9 @@
 import threading
 import time
+from venv import logger
+
 import RPi.GPIO as GPIO
-from VL53L1X import VL53L1X
+import VL53L1X  # This is intentional do not change.
 
 
 class ToFSensor:
@@ -12,7 +14,7 @@ class ToFSensor:
         boot_delay: float = 0.1,
         settle: float = 0.3,
         xshut_front: int = 17,
-        xshut_rear: int = 27
+        xshut_rear: int = 27,
     ):
         self.logger = logger
         self.i2c_bus = i2c_bus
@@ -44,18 +46,19 @@ class ToFSensor:
         self.init_sensor()
 
         # Used to keep track of direction
-        self. direction = ""
-
+        self.direction = ""
 
     # Start VL53L1X class
     def init_sensor(self):
         # Enable Front sensor
         GPIO.output(self._pins["rear"], GPIO.LOW)
-        GPIO.output(self._pins["front"], GPIO.HIGH) # Power xshut for front sensor
+        GPIO.output(self._pins["front"], GPIO.HIGH)  # Power xshut for front sensor
         time.sleep(self.boot_delay)
 
         # Init front sensor
-        tof_front = VL53L1X(i2c_bus=1, i2c_address=0x29)
+        tof_front = VL53L1X.VL53L1X(
+            i2c_bus=1, i2c_address=0x29
+        )  # "from VL53L1X import VL53L1X" updated to "import VL53L1X"
         tof_front.open()
         time.sleep(self.boot_delay)
         self.logger.info("Front sensor initialized")
@@ -66,7 +69,9 @@ class ToFSensor:
         time.sleep(self.boot_delay)
 
         # Init sensor
-        tof_rear = VL53L1X(i2c_bus=1, i2c_address=0x29)
+        tof_rear = VL53L1X.VL53L1X(
+            i2c_bus=1, i2c_address=0x29
+        )  # "from VL53L1X import VL53L1X" updated to "import VL53L1X"
         tof_rear.open()
         self.logger.info("Rear sonsor initialized")
 
@@ -77,7 +82,6 @@ class ToFSensor:
         # Disable both sensors
         GPIO.output(self._pins["front"], GPIO.LOW)
         GPIO.output(self._pins["rear"], GPIO.LOW)
-
 
     # Reads data from sensor
     def get_distance(self, which):
@@ -100,7 +104,6 @@ class ToFSensor:
                     self.logger.error(f"Failed to read distance on sensor '{which}'")
                     return None
 
-
     # Continuous sensor read in a blocking way
     def stream(self, which, interval=0.05, callback=None):
         # Clear flag
@@ -110,7 +113,7 @@ class ToFSensor:
             while True:
                 # Break if signaled to stop
                 if self.collision_thread_flag.is_set():
-                    break;
+                    break
 
                 # Read distance from sensor
                 distance = self.get_distance(which)
@@ -124,11 +127,10 @@ class ToFSensor:
                 if distance is not None and distance < 300:
                     return True
 
-                time.sleep(interval) # Wait for reading interval
+                time.sleep(interval)  # Wait for reading interval
 
         except KeyboardInterrupt:
             pass
-
 
     # Enable reading on desired sensor
     def enable(self, linear_vel):
@@ -161,7 +163,6 @@ class ToFSensor:
             time.sleep(0.05)
             self._tofs["rear"].start_ranging(1)
 
-
     # Close a given sensor
     def close_sensor(self, which):
         with self._lock:
@@ -170,7 +171,7 @@ class ToFSensor:
 
             # Check if tof class is active
             if not tof:
-                self.logger.error(F"{which} is not active")
+                self.logger.error(f"{which} is not active")
                 return
 
             # Try to close tof sensor
@@ -184,8 +185,121 @@ class ToFSensor:
             # Clear sensor class
             self._tofs[which] = None
 
-
     # Close all sensors
     def close_all(self):
         self.close_sensor("front")
         self.close_sensor("rear")
+
+    # Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test
+    # Edge Detection
+    def apply_user_roi(self, which: str):
+        tof = self._tofs.get(which)
+        if not tof or not hasattr(tof, "set_user_roi"):
+            self.logger.error(f"ROI not available on '{which}'")
+            return False
+        try:
+            # brief settle before stopping ranging
+            time.sleep(0.05)
+            roi = VL53L1X.VL53L1xUserRoi(
+                6, 9, 11, 15
+            )  # This is the reason for the change of "from VL53L1X import VL53L1X" to "import VL53L1X" -> to be able to update FoV on the sensor
+            tof.stop_ranging()
+            time.sleep(0.05)
+            tof.set_user_roi(roi)
+            # brief settle before starting ranging again
+            time.sleep(0.02)
+            tof.start_ranging(1)
+            # brief settle to let ranging stabilize
+            time.sleep(0.05)
+            self.logger.info(f"ROI applied on {which}: {roi}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to set ROI on '{which}': {e}")
+            return False
+
+    def sample_median(self, which: str, interval: float = 0.05):
+        values = []
+        invalid = 0
+        for _ in range(3):
+            d = self.get_distance(which)
+            if d is None:
+                invalid += 1
+            else:
+                values.append(d)
+            time.sleep(interval)
+        median = None
+        if values:
+            values.sort()
+            median = values[len(values) // 2]
+        return median, invalid, 3
+
+    def calibrate_baseline(self):
+        # Front
+        self.enable(0.1)
+        self.apply_user_roi("front")
+        fm, fi, fn = self.sample_median("front")
+        self._baseline_front = fm
+        self.logger.info(f"Front baseline: {fm} mm (invalid {fi}/{fn})")
+
+        # Rear
+        self.enable(-0.1)
+        self.apply_user_roi("rear")
+        rm, ri, rn = self.sample_median("rear")
+        self._baseline_rear = rm
+        self.logger.info(f"Rear baseline: {rm} mm (invalid {ri}/{rn})")
+
+    def run_once(self):
+        # Front
+        self.enable(0.1)
+        fm, fi, fn = self.sample_median("front")
+        fb = getattr(self, "_baseline_front", None)
+        fdelta = fm - fb if (fm is not None and fb is not None) else None
+
+        # Rear
+        self.enable(-0.1)
+        rm, ri, rn = self.sample_median("rear")
+        rb = getattr(self, "_baseline_rear", None)
+        rdelta = rm - rb if (rm is not None and rb is not None) else None
+
+        self.logger.info(
+            f"Front: cur={fm} mm base={fb} mm Δ={fdelta} invalid={fi}/{fn}"
+        )
+        self.logger.info(
+            f"Rear:  cur={rm} mm base={rb} mm Δ={rdelta} invalid={ri}/{rn}"
+        )
+
+
+if __name__ == "__main__":
+    logger = type(
+        "Log",
+        (),
+        {
+            "info": lambda self, msg: print(msg),
+            "error": lambda self, msg: print(msg),
+        },
+    )()
+
+    # Instantiate sensor manager
+    ts = ToFSensor(logger, 1, 0.1, 0.3, 17, 27)
+
+    try:
+        ts.enable(0.1)
+        ts.apply_user_roi("front")
+        fm, fi, fn = ts.sample_median("front")
+        print(f"[INFO] Front baseline: {fm} mm (invalid {fi}/{fn})")
+
+        ts.enable(-0.1)
+        ts.apply_user_roi("rear")
+        rm, ri, rn = ts.sample_median("rear")
+        print(f"[INFO] Rear baseline: {rm} mm (invalid {ri}/{rn})")
+
+        ts.enable(0.1)
+        fm, fi, fn = ts.sample_median("front")
+        ts.enable(-0.1)
+        rm, ri, rn = ts.sample_median("rear")
+        print(f"[INFO] Front: cur={fm} mm invalid={fi}/{fn}")
+        print(f"[INFO] Rear:  cur={rm} mm invalid={ri}/{rn}")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        ts.close_all()
