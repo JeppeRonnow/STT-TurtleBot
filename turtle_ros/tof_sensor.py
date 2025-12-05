@@ -3,7 +3,7 @@ import time
 from venv import logger
 
 import RPi.GPIO as GPIO
-import VL53L1X  # This is intentional do not change.
+import VL53L1X
 
 
 class ToFSensor:
@@ -56,9 +56,7 @@ class ToFSensor:
         time.sleep(self.boot_delay)
 
         # Init front sensor
-        tof_front = VL53L1X.VL53L1X(
-            i2c_bus=1, i2c_address=0x29
-        )  # "from VL53L1X import VL53L1X" updated to "import VL53L1X"
+        tof_front = VL53L1X.VL53L1X(i2c_bus=1, i2c_address=0x29)
         tof_front.open()
         time.sleep(self.boot_delay)
         self.logger.info("Front sensor initialized")
@@ -69,9 +67,7 @@ class ToFSensor:
         time.sleep(self.boot_delay)
 
         # Init sensor
-        tof_rear = VL53L1X.VL53L1X(
-            i2c_bus=1, i2c_address=0x29
-        )  # "from VL53L1X import VL53L1X" updated to "import VL53L1X"
+        tof_rear = VL53L1X.VL53L1X(i2c_bus=1, i2c_address=0x29)
         tof_rear.open()
         self.logger.info("Rear sonsor initialized")
 
@@ -192,17 +188,12 @@ class ToFSensor:
 
     # Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test
     # Edge Detection
-    def apply_user_roi(self, which: str):
+    def set_ledge_detect_roi(self, which: str):
         tof = self._tofs.get(which)
-        if not tof or not hasattr(tof, "set_user_roi"):
-            self.logger.error(f"ROI not available on '{which}'")
-            return False
         try:
             # brief settle before stopping ranging
             time.sleep(0.05)
-            roi = VL53L1X.VL53L1xUserRoi(
-                6, 9, 15, 14
-            )  # This is the reason for the change of "from VL53L1X import VL53L1X" to "import VL53L1X" -> to be able to update FoV on the sensor
+            roi = VL53L1X.VL53L1xUserRoi(6, 9, 15, 14)
             tof.stop_ranging()
             time.sleep(0.05)
             tof.set_user_roi(roi)
@@ -217,10 +208,30 @@ class ToFSensor:
             self.logger.error(f"Failed to set ROI on '{which}': {e}")
             return False
 
-    def sample_median(self, which: str, interval: float = 0.05):
+    def set_wide_roi(self, which: str):
+        tof = self._tofs.get(which)
+        try:
+            # brief settle before stopping ranging
+            time.sleep(0.05)
+            roi = VL53L1X.VL53L1xUserRoi(0, 15, 15, 0)
+            tof.stop_ranging()
+            time.sleep(0.05)
+            tof.set_user_roi(roi)
+            # brief settle before starting ranging again
+            time.sleep(0.02)
+            tof.start_ranging(1)
+            # brief settle to let ranging stabilize
+            time.sleep(0.05)
+            self.logger.info(f"ROI applied on {which}: {roi}")
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to set ROI on '{which}': {e}")
+            return False
+
+    def sample_median(self, which: str, n: int = 3, interval: float = 0.05):
         values = []
         invalid = 0
-        for _ in range(3):
+        for _ in range(n):
             d = self.get_distance(which)
             if d is None:
                 invalid += 1
@@ -231,19 +242,19 @@ class ToFSensor:
         if values:
             values.sort()
             median = values[len(values) // 2]
-        return median, invalid, 3
+        return median, invalid, n
 
     def calibrate_baseline(self):
         # Front
         self.enable(0.1)
-        self.apply_user_roi("front")
+        self.set_ledge_detect_roi("front")
         fm, fi, fn = self.sample_median("front")
         self._baseline_front = fm
         self.logger.info(f"Front baseline: {fm} mm (invalid {fi}/{fn})")
 
         # Rear
         self.enable(-0.1)
-        self.apply_user_roi("rear")
+        self.set_ledge_detect_roi("rear")
         rm, ri, rn = self.sample_median("rear")
         self._baseline_rear = rm
         self.logger.info(f"Rear baseline: {rm} mm (invalid {ri}/{rn})")
@@ -268,6 +279,35 @@ class ToFSensor:
             f"Rear:  cur={rm} mm base={rb} mm Δ={rdelta} invalid={ri}/{rn}"
         )
 
+    def ledge_detect(self, should_check_ledge: bool, linear_vel):
+        which = "front" if linear_vel > 0.0 else "rear"
+
+        if not should_check_ledge:
+            return False, None, 0
+
+        self.enable(linear_vel)
+        time.sleep(0.05)
+        self.set_ledge_detect_roi(which)
+        time.sleep(0.05)
+
+        median, invalid, n = self.sample_median(which, n=3, interval=0.05)
+
+        # Compare against baseline
+        base = getattr(
+            self, "_baseline_front" if which == "front" else "_baseline_rear", None
+        )
+        delta = (median - base) if (median is not None and base is not None) else None
+
+        delta_flag = bool(delta is not None and abs(delta) >= 80)
+        invalid_flag = invalid >= 2
+        flag = delta_flag or invalid_flag
+
+        # Print concise status and return
+        self.logger.info(
+            f"{which.capitalize()}: cur={median}mm base={base}mm Δ={delta} invalid={invalid}/{n} flag={'YES' if flag else 'NO'}"
+        )
+        return flag, median, invalid
+
 
 if __name__ == "__main__":
     logger = type(
@@ -284,12 +324,12 @@ if __name__ == "__main__":
 
     try:
         ts.enable(0.1)
-        ts.apply_user_roi("front")
+        ts.set_ledge_detect_roi("front")
         fm, fi, fn = ts.sample_median("front")
         print(f"[INFO] Front baseline: {fm} mm (invalid {fi}/{fn})")
 
         ts.enable(-0.1)
-        ts.apply_user_roi("rear")
+        ts.set_ledge_detect_roi("rear")
         rm, ri, rn = ts.sample_median("rear")
         print(f"[INFO] Rear baseline: {rm} mm (invalid {ri}/{rn})")
 
@@ -299,6 +339,7 @@ if __name__ == "__main__":
         rm, ri, rn = ts.sample_median("rear")
         print(f"[INFO] Front: cur={fm} mm invalid={fi}/{fn}")
         print(f"[INFO] Rear:  cur={rm} mm invalid={ri}/{rn}")
+
     except KeyboardInterrupt:
         pass
     finally:
