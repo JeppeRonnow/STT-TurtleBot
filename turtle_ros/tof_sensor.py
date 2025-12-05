@@ -188,12 +188,13 @@ class ToFSensor:
 
     # Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test
     # Edge Detection
-    def set_ledge_detect_roi(self, which: str):
+    def set_ledge_detect_roi(self):
+        which = self.direction if self.direction in ("front", "rear") else "front"
         tof = self._tofs.get(which)
         try:
             # brief settle before stopping ranging
+            roi = VL53L1X.VL53L1xUserRoi(7, 8, 15, 15)
             time.sleep(0.05)
-            roi = VL53L1X.VL53L1xUserRoi(6, 9, 15, 14)
             tof.stop_ranging()
             time.sleep(0.05)
             tof.set_user_roi(roi)
@@ -208,12 +209,13 @@ class ToFSensor:
             self.logger.error(f"Failed to set ROI on '{which}': {e}")
             return False
 
-    def set_wide_roi(self, which: str):
+    def set_wide_roi(self):
+        which = self.direction if self.direction in ("front", "rear") else "front"
         tof = self._tofs.get(which)
         try:
             # brief settle before stopping ranging
-            time.sleep(0.05)
             roi = VL53L1X.VL53L1xUserRoi(0, 15, 15, 0)
+            time.sleep(0.05)
             tof.stop_ranging()
             time.sleep(0.05)
             tof.set_user_roi(roi)
@@ -247,14 +249,14 @@ class ToFSensor:
     def calibrate_baseline(self):
         # Front
         self.enable(0.1)
-        self.set_ledge_detect_roi("front")
+        self.set_ledge_detect_roi()
         fm, fi, fn = self.sample_median("front")
         self._baseline_front = fm
         self.logger.info(f"Front baseline: {fm} mm (invalid {fi}/{fn})")
 
         # Rear
         self.enable(-0.1)
-        self.set_ledge_detect_roi("rear")
+        self.set_ledge_detect_roi()
         rm, ri, rn = self.sample_median("rear")
         self._baseline_rear = rm
         self.logger.info(f"Rear baseline: {rm} mm (invalid {ri}/{rn})")
@@ -287,7 +289,7 @@ class ToFSensor:
 
         self.enable(linear_vel)
         time.sleep(0.05)
-        self.set_ledge_detect_roi(which)
+        self.set_ledge_detect_roi()
         time.sleep(0.05)
 
         median, invalid, n = self.sample_median(which, n=3, interval=0.05)
@@ -324,17 +326,24 @@ if __name__ == "__main__":
 
     try:
         ts.enable(0.1)
-        ts.set_ledge_detect_roi("front")
+        ts.set_ledge_detect_roi()
         fm, fi, fn = ts.sample_median("front")
         print(f"[INFO] Front baseline: {fm} mm (invalid {fi}/{fn})")
 
+        time.sleep(0.1)
+
         ts.enable(-0.1)
-        ts.set_ledge_detect_roi("rear")
+        ts.set_ledge_detect_roi()
         rm, ri, rn = ts.sample_median("rear")
         print(f"[INFO] Rear baseline: {rm} mm (invalid {ri}/{rn})")
 
+        time.sleep(0.1)
+
         ts.enable(0.1)
         fm, fi, fn = ts.sample_median("front")
+
+        time.sleep(0.1)
+
         ts.enable(-0.1)
         rm, ri, rn = ts.sample_median("rear")
         print(f"[INFO] Front: cur={fm} mm invalid={fi}/{fn}")
