@@ -188,33 +188,19 @@ class ToFSensor:
 
     # Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test
     # Edge Detection
-    def set_ledge_detect_roi(self):
+    def set_roi(self, roi_preset: str):
         which = self.direction if self.direction in ("front", "rear") else "front"
         tof = self._tofs.get(which)
-        try:
-            # brief settle before stopping ranging
-            roi = VL53L1X.VL53L1xUserRoi(7, 8, 15, 15)
-            time.sleep(0.05)
-            tof.stop_ranging()
-            time.sleep(0.05)
-            tof.set_user_roi(roi)
-            # brief settle before starting ranging again
-            time.sleep(0.02)
-            tof.start_ranging(1)
-            # brief settle to let ranging stabilize
-            time.sleep(0.05)
-            self.logger.info(f"ROI applied on {which}: {roi}")
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to set ROI on '{which}': {e}")
-            return False
 
-    def set_wide_roi(self):
-        which = self.direction if self.direction in ("front", "rear") else "front"
-        tof = self._tofs.get(which)
+        if roi_preset == "ledge_detect":
+            roi = VL53L1X.VL53L1xUserRoi(7, 8, 14, 15)
+        elif roi_preset == "wide":
+            roi = VL53L1X.VL53L1xUserRoi(0, 15, 15, 0)
+        else:
+            roi = VL53L1X.VL53L1xUserRoi(0, 15, 15, 0)
+
         try:
             # brief settle before stopping ranging
-            roi = VL53L1X.VL53L1xUserRoi(0, 15, 15, 0)
             time.sleep(0.05)
             tof.stop_ranging()
             time.sleep(0.05)
@@ -224,7 +210,7 @@ class ToFSensor:
             tof.start_ranging(1)
             # brief settle to let ranging stabilize
             time.sleep(0.05)
-            self.logger.info(f"ROI applied on {which}: {roi}")
+            self.logger.info(f"ROI applied on {which}: {roi_preset}")
             return True
         except Exception as e:
             self.logger.error(f"Failed to set ROI on '{which}': {e}")
@@ -249,66 +235,83 @@ class ToFSensor:
     def calibrate_baseline(self):
         # Front
         self.enable(0.1)
-        self.set_ledge_detect_roi()
-        fm, fi, fn = self.sample_median("front")
+        time.sleep(0.1)
+        self.set_roi("ledge_detect")
+        time.sleep(0.1)
+        fm, fi, fn = self.sample_median("front", 3, 0.05)
         self._baseline_front = fm
         self.logger.info(f"Front baseline: {fm} mm (invalid {fi}/{fn})")
 
         # Rear
+        time.sleep(0.1)
         self.enable(-0.1)
-        self.set_ledge_detect_roi()
-        rm, ri, rn = self.sample_median("rear")
+        time.sleep(0.1)
+        self.set_roi("ledge_detect")
+        time.sleep(0.1)
+        rm, ri, rn = self.sample_median("rear", 3, 0.05)
         self._baseline_rear = rm
         self.logger.info(f"Rear baseline: {rm} mm (invalid {ri}/{rn})")
 
-    def run_once(self):
-        # Front
-        self.enable(0.1)
-        fm, fi, fn = self.sample_median("front")
-        fb = getattr(self, "_baseline_front", None)
-        fdelta = fm - fb if (fm is not None and fb is not None) else None
-
-        # Rear
-        self.enable(-0.1)
-        rm, ri, rn = self.sample_median("rear")
-        rb = getattr(self, "_baseline_rear", None)
-        rdelta = rm - rb if (rm is not None and rb is not None) else None
-
-        self.logger.info(
-            f"Front: cur={fm} mm base={fb} mm Δ={fdelta} invalid={fi}/{fn}"
-        )
-        self.logger.info(
-            f"Rear:  cur={rm} mm base={rb} mm Δ={rdelta} invalid={ri}/{rn}"
-        )
-
-    def ledge_detect(self, should_check_ledge: bool, linear_vel):
+    def ledge_detect(
+        self,
+        should_check_ledge: bool,
+        linear_vel,
+        delta_threshold_mm: int = 80,
+        invalid_threshold: int = 2,
+        debounce_cycles: int = 2,
+        interval: float = 0.05,
+    ):
+        # Decide sensor by velocity sign
         which = "front" if linear_vel > 0.0 else "rear"
 
         if not should_check_ledge:
             return False, None, 0
 
+        # Enable and apply ROI once
         self.enable(linear_vel)
         time.sleep(0.05)
-        self.set_ledge_detect_roi()
+        self.set_roi("ledge_detect")
         time.sleep(0.05)
 
-        median, invalid, n = self.sample_median(which, n=3, interval=0.05)
-
-        # Compare against baseline
+        # Retrieve baseline
         base = getattr(
             self, "_baseline_front" if which == "front" else "_baseline_rear", None
         )
-        delta = (median - base) if (median is not None and base is not None) else None
+        if base is None:
+            self.logger.error(
+                f"No baseline set for {which}. Call calibrate_baseline() first."
+            )
+            return False, None, 0
 
-        delta_flag = bool(delta is not None and abs(delta) >= 80)
-        invalid_flag = invalid >= 2
-        flag = delta_flag or invalid_flag
+        # Continuous detection loop with debounce; stop when collision_thread_flag is set
+        streak = 0
+        flag = False
+        while not self.collision_thread_flag.is_set():
+            median, invalid, n = self.sample_median(which, 3, interval)
 
-        # Print concise status and return
-        self.logger.info(
-            f"{which.capitalize()}: cur={median}mm base={base}mm Δ={delta} invalid={invalid}/{n} flag={'YES' if flag else 'NO'}"
+            delta = (median - base) if (median is not None) else None
+            delta_flag = bool(delta is not None and abs(delta) >= delta_threshold_mm)
+            invalid_flag = invalid >= invalid_threshold
+            current_flag = delta_flag or invalid_flag
+
+            streak = streak + 1 if current_flag else 0
+            flag = streak >= debounce_cycles
+
+            # Print concise status
+            self.logger.info(
+                f"{which.capitalize()}: cur={median}mm base={base}mm Δ={delta} invalid={invalid}/{n} "
+                f"delta_flag={'YES' if delta_flag else 'NO'} invalid_flag={'YES' if invalid_flag else 'NO'} "
+                f"flag={'YES' if flag else 'NO'} streak={streak}/{debounce_cycles}"
+            )
+
+            # Keep running continuously even if flag is true (per your test approach)
+            time.sleep(interval)
+
+        return (
+            flag,
+            median if "median" in locals() else None,
+            invalid if "invalid" in locals() else 0,
         )
-        return flag, median, invalid
 
 
 if __name__ == "__main__":
@@ -325,29 +328,9 @@ if __name__ == "__main__":
     ts = ToFSensor(logger, 1, 0.1, 0.3, 17, 27)
 
     try:
-        ts.enable(0.1)
-        ts.set_ledge_detect_roi()
-        fm, fi, fn = ts.sample_median("front")
-        print(f"[INFO] Front baseline: {fm} mm (invalid {fi}/{fn})")
-
-        time.sleep(0.1)
-
-        ts.enable(-0.1)
-        ts.set_ledge_detect_roi()
-        rm, ri, rn = ts.sample_median("rear")
-        print(f"[INFO] Rear baseline: {rm} mm (invalid {ri}/{rn})")
-
-        time.sleep(0.1)
-
-        ts.enable(0.1)
-        fm, fi, fn = ts.sample_median("front")
-
-        time.sleep(0.1)
-
-        ts.enable(-0.1)
-        rm, ri, rn = ts.sample_median("rear")
-        print(f"[INFO] Front: cur={fm} mm invalid={fi}/{fn}")
-        print(f"[INFO] Rear:  cur={rm} mm invalid={ri}/{rn}")
+        ts.calibrate_baseline()
+        time.sleep(0.3)
+        ts.ledge_detect(True, -0.1)
 
     except KeyboardInterrupt:
         pass
