@@ -11,6 +11,18 @@ class Logic:
     fwd_syn = {"forward", "straight", "ahead"}
     back_syn = {"backward", "backwards", "reverse"}
 
+    numbers = {"one": 1, 
+               "two": 2, 
+               "three": 3, 
+               "four": 4, 
+               "five": 5,
+               "six": 6,
+               "seven": 7,
+               "eight": 8,
+               "nine": 9,
+               "ten": 10
+               }
+
     dist_units = {"mm", "millimeter", "millimeters", "cm", "centimeter", "centimeters", "m", "meter", "meters"}
 
 
@@ -31,6 +43,8 @@ class Logic:
     def handle_transcription(self, words: List[str]) -> Tuple[Optional[str], int]:
         if not words:
             return None
+        
+        words = self.format_numbers(words)
 
         for word in words:
             # Stop
@@ -83,6 +97,16 @@ class Logic:
                     return payload
 
         return None
+    
+    
+    def format_numbers(self, words: List[str]) -> List[str]:
+        formatted_words = []
+        for word in words:
+            if word in self.numbers:
+                formatted_words.append(str(self.numbers[word]))
+            else:
+                formatted_words.append(word)
+        return formatted_words
 
 
     @staticmethod

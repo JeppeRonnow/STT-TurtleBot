@@ -86,6 +86,7 @@ class MqttToCmdVelNode(Node):
             # Check if comand is return
             if (payload['linear']['x'] == 69.69 and payload['angular']['z'] == 69.69):
                 self.start_return()
+                self.start_return()
                 return
 
             # Check if return is active
