@@ -4,6 +4,7 @@ from geometry_msgs.msg import TwistStamped
 import paho.mqtt.client as mqtt
 import json
 import threading
+import speaker
 
 
 import RPi.GPIO as GPIO 
@@ -70,6 +71,7 @@ class MqttToCmdVelNode(Node):
     # When connecting to MQTT broker
     def on_connect(self, client, userdata, falgs, rc):
         if rc == 0:
+            speaker.play_tone(16, 400, 0.1)
             self.get_logger().info("Connect to MQTT broker succesfully")
         else:
             self.get_logger().error("Failed to connect to MQTT broker, return code: %d", rc)
@@ -113,6 +115,8 @@ class MqttToCmdVelNode(Node):
             self.get_logger().info(f"Published cmd_vel: linear={twist_msg.twist.linear.x}, angualr={twist_msg.twist.angular.z}")
 
             self.Pos_tracker.save_step(twist_msg)
+            speaker.play_tone(16,523,1)
+            speaker.play_tone(16,200,0.7)
 
         except json.JSONDecodeError:
             self.get_logger().error("Failed to decode JSON from MQTT message.")

@@ -20,6 +20,9 @@ import sys
 import time
 import subprocess
 import argparse
+import audio_data
+import wave
+import struct
 
 try:
 	import RPi.GPIO as GPIO
