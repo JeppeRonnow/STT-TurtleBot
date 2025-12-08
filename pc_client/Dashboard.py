@@ -490,6 +490,50 @@ class Dashboard(ctk.CTk):
         # Redraw canvas
         self.robot_canvas.draw_idle()
 
+    def get_instruction_name(self, linear, angular):
+        """
+        Get instruction name from velocity values
+        
+        Args:
+            linear: Linear velocity (m/s)
+            angular: Angular velocity (rad/s)
+            
+        Returns:
+            str: Instruction name (e.g., "stop", "forward", "backward", "turn left", "turn right", "return")
+        """
+        # Special return code (must match logic.py)
+        RETURN_CODE = 69.69
+        
+        # Check for return command
+        if abs(linear - RETURN_CODE) < 0.01 and abs(angular - RETURN_CODE) < 0.01:
+            return "return"
+        
+        # Check for stop (both velocities are 0)
+        if abs(linear) < 0.001 and abs(angular) < 0.001:
+            return "stop"
+        
+        # Check for turning (linear is 0, angular is not)
+        if abs(linear) < 0.001 and abs(angular) >= 0.001:
+            if angular < 0:
+                return "turn right"
+            else:
+                return "turn left"
+        
+        # Check for forward/backward movement (angular is 0, linear is not)
+        if abs(angular) < 0.001 and abs(linear) >= 0.001:
+            if linear > 0:
+                return "forward"
+            else:
+                return "backward"
+        
+        # Mixed movement (both linear and angular)
+        if abs(linear) >= 0.001 and abs(angular) >= 0.001:
+            direction = "forward" if linear > 0 else "backward"
+            turn = "left" if angular > 0 else "right"
+            return f"{direction} + turn {turn}"
+        
+        return "unknown"
+
     def update_command_history(self, linear, angular):
         """
         Update command history list with new velocity command
@@ -512,8 +556,9 @@ class Dashboard(ctk.CTk):
         for i, label in enumerate(self.cmd_labels):
             if i < len(self.command_history):
                 timestamp, lin, ang = self.command_history[i]
-                # Format: [HH:MM:SS] Linear: +0.20 | Angular: -1.00
-                text = f"[{timestamp}] L: {lin:+.2f} m/s | A: {ang:+.2f} rad/s"
+                instruction_name = self.get_instruction_name(lin, ang)
+                # Format: [HH:MM:SS] Linear: +0.20 | Angular: -1.00 - instruction_name
+                text = f"[{timestamp}] L: {lin:+.2f} m/s | A: {ang:+.2f} rad/s - {instruction_name}"
                 label.configure(text=text, text_color="white")
             else:
                 label.configure(text="", text_color="white")
