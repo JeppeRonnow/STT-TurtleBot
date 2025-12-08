@@ -186,16 +186,29 @@ class ToFSensor:
         self.close_sensor("front")
         self.close_sensor("rear")
 
-    # Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test Test
-    # Edge Detection
+    # Ledge Detection
+    #
+    # Left, right, top and bottom are relative to the SPAD matrix coordinates,
+    # which will be mirrored in real scene coordinates.
+    # (or even rotated, depending on the VM53L1X element alignment on the board and on the board position)
+    #
+    # ROI in SPAD matrix coords:
+    #
+    # 15  top-left
+    # |  X____
+    # |  |    |
+    # |  |____X
+    # |        bottom-right
+    # 0__________15
+
     def set_roi(self, roi_preset: str):
         which = self.direction if self.direction in ("front", "rear") else "front"
         tof = self._tofs.get(which)
 
         if roi_preset == "ledge_detect":
-            roi = VL53L1X.VL53L1xUserRoi(7, 8, 14, 15)
-        elif roi_preset == "wide":
-            roi = VL53L1X.VL53L1xUserRoi(0, 15, 15, 0)
+            roi = VL53L1X.VL53L1xUserRoi(7, 8, 15, 14)
+        elif roi_preset == "default":
+            roi = VL53L1X.VL53L1xUserRoi(0, 15, 9, 0)
         else:
             roi = VL53L1X.VL53L1xUserRoi(0, 15, 15, 0)
 
