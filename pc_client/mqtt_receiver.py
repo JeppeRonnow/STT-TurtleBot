@@ -64,6 +64,7 @@ class MQTT_Receiver:
                 # Update dashboard if available
                 if self.dashboard:
                     self.dashboard.update_robot_velocity(linear, angular)
+                    self.dashboard.update_command_history(linear, angular)
             
             # Handle sensor data
             elif payload['type'] == "sensor":

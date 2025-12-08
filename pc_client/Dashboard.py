@@ -31,6 +31,10 @@ class Dashboard(ctk.CTk):
         self.animation_timer = None
         self.last_update_time = time.time()
 
+        # Command history tracking (last 10 commands)
+        self.command_history = []  # List of (timestamp, linear, angular) tuples
+        self.max_history_entries = 10
+
         # Configure grid layout (left panel wider than right)
         self.grid_columnconfigure(0, weight=2)
         self.grid_columnconfigure(1, weight=1)
@@ -168,66 +172,72 @@ class Dashboard(ctk.CTk):
         self.right_panel.grid_rowconfigure(1, weight=1)
         self.right_panel.grid_columnconfigure(0, weight=1)
 
-        # Create matplotlib figure with 2 subplots
-        self.figure = Figure(figsize=(6, 8), dpi=100)
+        # Create frame for command history (top)
+        self.cmd_history_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
+        self.cmd_history_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+
+        # Command History header
+        self.cmd_history_label = ctk.CTkLabel(
+            self.cmd_history_frame,
+            text="Command History",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        self.cmd_history_label.pack(padx=10, pady=(10, 5))
+
+        # Scrollable frame for command list
+        self.cmd_list_frame = ctk.CTkScrollableFrame(
+            self.cmd_history_frame,
+            corner_radius=5,
+            fg_color="#1e1e1e",
+        )
+        self.cmd_list_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
+
+        # Initialize empty command labels list
+        self.cmd_labels = []
+        for i in range(self.max_history_entries):
+            label = ctk.CTkLabel(
+                self.cmd_list_frame,
+                text="",
+                font=ctk.CTkFont(size=11, family="monospace"),
+                anchor="w",
+                justify="left",
+            )
+            label.pack(fill="x", padx=5, pady=2)
+            self.cmd_labels.append(label)
+
+        # Create matplotlib figure with 1 subplot (just microphone)
+        self.figure = Figure(figsize=(6, 4), dpi=100)
         self.figure.patch.set_facecolor("#2b2b2b")
 
-        # TOF Plot (top)
-        self.ax_tof = self.figure.add_subplot(211)
-        self.ax_tof.set_facecolor("#1e1e1e")
-        self._style_axis(self.ax_tof)
-        self.ax_tof.set_title("TOF Sensor Data", color="white", fontsize=12)
-        self.ax_tof.set_xlabel("Time (s)", color="white")
-        self.ax_tof.set_ylabel("Distance (mm)", color="white")
-        self.ax_tof.set_ylim(0, 3000)  # Fixed Y-axis range for distance in mm
-        self.ax_tof.grid(True, alpha=0.3, color="white")
-
-        # Initialize TOF plot with sample data
-        self.tof_time = np.linspace(0, 10, 100)
-        self.tof_data = np.random.rand(100) * 500  # Distance in mm
-        (self.tof_line,) = self.ax_tof.plot(
-            self.tof_time, self.tof_data, color="#FF9800", linewidth=2, label="TOF"
-        )
-        self.ax_tof.legend(
-            loc="upper right",
-            facecolor="#2b2b2b",
-            edgecolor="white",
-            labelcolor="white",
-        )
-
-        # Mic Input Plot (bottom)
-        self.ax_mic = self.figure.add_subplot(212)
+        # Audio Recordings Plot
+        self.ax_mic = self.figure.add_subplot(111)
         self.ax_mic.set_facecolor("#1e1e1e")
         self._style_axis(self.ax_mic)
         self.ax_mic.set_title(
-            "Microphone Input (Live vs Filtered)", color="white", fontsize=12
+            "Audio Recordings (Raw vs Filtered)", color="white", fontsize=12
         )
         self.ax_mic.set_xlabel("Time (s)", color="white")
         self.ax_mic.set_ylabel("Amplitude", color="white")
-        self.ax_mic.set_ylim(-1.5, 1.5)  # Fixed Y-axis range
+        self.ax_mic.set_ylim(-1.0, 1.0)  # Linear amplitude range
+        self.ax_mic.set_xlim(0, 3)  # Default 3 seconds
         self.ax_mic.grid(True, alpha=0.3, color="white")
 
-        # Initialize Mic plot with sample data
-        self.mic_time = np.linspace(0, 1, 1000)
-        self.live_audio = np.sin(2 * np.pi * 5 * self.mic_time) + 0.2 * np.random.randn(
-            1000
+        # Initialize empty plot lines for 3 recordings
+        (self.raw_line,) = self.ax_mic.plot(
+            [], [],
+            color="#FF5722",
+            linewidth=1,
+            alpha=0.6,
+            label="Raw",
         )
-        self.filtered_audio = np.sin(2 * np.pi * 5 * self.mic_time)
-        (self.live_line,) = self.ax_mic.plot(
-            self.mic_time,
-            self.live_audio,
+        (self.filtered_line,) = self.ax_mic.plot(
+            [], [],
             color="#2196F3",
             linewidth=1,
             alpha=0.7,
-            label="Live Audio",
+            label="Filtered",
         )
-        (self.filtered_line,) = self.ax_mic.plot(
-            self.mic_time,
-            self.filtered_audio,
-            color="#4CAF50",
-            linewidth=2,
-            label="Filtered Audio",
-        )
+
         self.ax_mic.legend(
             loc="upper right",
             facecolor="#2b2b2b",
@@ -238,11 +248,11 @@ class Dashboard(ctk.CTk):
         # Adjust spacing between subplots
         self.figure.tight_layout(pad=3.0)
 
-        # Create canvas and add to right panel
+        # Create canvas and add to right panel (bottom half)
         self.canvas = FigureCanvasTkAgg(self.figure, master=self.right_panel)
         self.canvas.draw()
         self.canvas.get_tk_widget().grid(
-            row=0, column=0, rowspan=2, padx=10, pady=10, sticky="nsew"
+            row=1, column=0, padx=10, pady=10, sticky="nsew"
         )
 
         # Create stop button in absolute top right corner
@@ -480,35 +490,100 @@ class Dashboard(ctk.CTk):
         # Redraw canvas
         self.robot_canvas.draw_idle()
 
-    def update_tof_plot(self, time_data, tof_values):
+    def get_instruction_name(self, linear, angular):
         """
-        Update TOF plot with new data
+        Get instruction name from velocity values
+        
+        Args:
+            linear: Linear velocity (m/s)
+            angular: Angular velocity (rad/s)
+            
+        Returns:
+            str: Instruction name (e.g., "stop", "forward", "backward", "turn left", "turn right", "return")
+        """
+        # Special return code (must match logic.py)
+        RETURN_CODE = 69.69
+        
+        # Check for return command
+        if abs(linear - RETURN_CODE) < 0.01 and abs(angular - RETURN_CODE) < 0.01:
+            return "return"
+        
+        # Check for stop (both velocities are 0)
+        if abs(linear) < 0.001 and abs(angular) < 0.001:
+            return "stop"
+        
+        # Check for turning (linear is 0, angular is not)
+        if abs(linear) < 0.001 and abs(angular) >= 0.001:
+            if angular < 0:
+                return "turn right"
+            else:
+                return "turn left"
+        
+        # Check for forward/backward movement (angular is 0, linear is not)
+        if abs(angular) < 0.001 and abs(linear) >= 0.001:
+            if linear > 0:
+                return "forward"
+            else:
+                return "backward"
+        
+        # Mixed movement (both linear and angular)
+        if abs(linear) >= 0.001 and abs(angular) >= 0.001:
+            direction = "forward" if linear > 0 else "backward"
+            turn = "left" if angular > 0 else "right"
+            return f"{direction} + turn {turn}"
+        
+        return "unknown"
+
+    def update_command_history(self, linear, angular):
+        """
+        Update command history list with new velocity command
 
         Args:
-            time_data: Array of time values
-            tof_values: Array of TOF sensor values
+            linear: Linear velocity (m/s)
+            angular: Angular velocity (rad/s)
         """
-        self.tof_line.set_xdata(time_data)
-        self.tof_line.set_ydata(tof_values)
-        self.ax_tof.relim()
-        self.ax_tof.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
-        self.canvas.draw_idle()
+        # Get current timestamp
+        timestamp = time.strftime("%H:%M:%S")
+        
+        # Add new command to history (at the beginning for newest-first display)
+        self.command_history.insert(0, (timestamp, linear, angular))
+        
+        # Keep only the last max_history_entries commands
+        if len(self.command_history) > self.max_history_entries:
+            self.command_history = self.command_history[:self.max_history_entries]
+        
+        # Update the labels
+        for i, label in enumerate(self.cmd_labels):
+            if i < len(self.command_history):
+                timestamp, lin, ang = self.command_history[i]
+                instruction_name = self.get_instruction_name(lin, ang)
+                # Format: [HH:MM:SS] Linear: +0.20 | Angular: -1.00 - instruction_name
+                text = f"[{timestamp}] L: {lin:+.2f} m/s | A: {ang:+.2f} rad/s - {instruction_name}"
+                label.configure(text=text, text_color="white")
+            else:
+                label.configure(text="", text_color="white")
 
-    def update_mic_plot(self, time_data, live_audio, filtered_audio):
+    def update_audio_recordings(self, raw_audio, raw_time, filtered_audio, filtered_time):
         """
-        Update microphone plot with live and filtered audio
+        Update audio plot with the 2 saved recordings
 
         Args:
-            time_data: Array of time values
-            live_audio: Array of live audio samples
-            filtered_audio: Array of filtered audio samples
+            raw_audio: Raw audio array
+            raw_time: Time array for raw audio
+            filtered_audio: Filtered audio array
+            filtered_time: Time array for filtered audio
         """
-        self.live_line.set_xdata(time_data)
-        self.live_line.set_ydata(live_audio)
-        self.filtered_line.set_xdata(time_data)
+        # Update both lines with linear amplitude
+        self.raw_line.set_xdata(raw_time)
+        self.raw_line.set_ydata(raw_audio)
+        self.filtered_line.set_xdata(filtered_time)
         self.filtered_line.set_ydata(filtered_audio)
+        
+        # Auto-scale axes
         self.ax_mic.relim()
-        self.ax_mic.autoscale_view(scalex=True, scaley=False)  # Only autoscale X-axis
+        self.ax_mic.autoscale_view(scalex=True, scaley=True)
+        
+        # Redraw canvas
         self.canvas.draw_idle()
 
 
@@ -547,18 +622,8 @@ if __name__ == "__main__":
         # Update robot velocity (this will trigger the animation)
         app.update_robot_velocity(linear, angular)
 
-        # Update TOF plot with simulated sensor data (distance in mm)
-        tof_time = np.linspace(0, 10, 100)
-        tof_data = 250 + 100 * np.sin(tof_time + t * 0.1) + 20 * np.random.randn(100)
-        app.update_tof_plot(tof_time, tof_data)
-
-        # Update Mic plot with simulated audio
-        mic_time = np.linspace(0, 1, 1000)
-        live_audio = np.sin(2 * np.pi * 5 * mic_time + t * 0.1) + 0.2 * np.random.randn(
-            1000
-        )
-        filtered_audio = np.sin(2 * np.pi * 5 * mic_time + t * 0.1)
-        app.update_mic_plot(mic_time, live_audio, filtered_audio)
+        # Update Command History with current velocities
+        app.update_command_history(linear, angular)
 
         test_counter[0] += 1
 

@@ -2,6 +2,9 @@ from typing import List, Optional, Tuple, Union
 from move_timer  import Move_Timer
 
 class Logic:
+    # Special command codes (must match mqtt_2_cmdvel_node.py expectations)
+    RETURN_CODE = 69.69  # Code for return command (both linear and angular)
+    
     # move_syn = {"move", "go", "walk", "drive"} Not currently in use
     turn_syn = {"turn", "rotate"}
     stop_syn = {"stop", "halt", "freeze", "wait", "pause"}
@@ -157,73 +160,71 @@ class Logic:
             return (0.0, 0.0)
 
         if payload[0] == "return":
-            return (69.69, 69.69)
+            return (self.RETURN_CODE, self.RETURN_CODE)
 
         if payload[0] == "turn" and payload[1]:
             val = float(payload[1])
-
-            if val == 69.69 or val == -69.69:
-                return (0.0, self.TURN_VELOCITY) # Turn right
+            self.timer.set_timer(payload[0], val)
+            
+            if val > 0:
+                return (0.0, -self.TURN_VELOCITY)
             else:
-                self.timer.set_timer(payload[0], val)
-                if val > 0:
-                    return (0.0, -self.TURN_VELOCITY)
-            return (0.0, self.TURN_VELOCITY)
+                return (0.0, self.TURN_VELOCITY)
 
         if payload[0] == "move" and payload[1]:
             val = float(payload[1])
-
-            if val == 69.69:
-                return (self.MOVE_VELOCITY, 0.0) # Move forward
-            elif val == -69.69:
-                return (-self.MOVE_VELOCITY, 0.0) # Move backward
-
+            self.timer.set_timer(payload[0], val)
+            
+            # Positive values move forward
+            # Negative values move backward
+            if val > 0:
+                return (self.MOVE_VELOCITY, 0.0)
             else:
-                self.timer.set_timer(payload[0], val)
-                if val > 0:
-                    return (self.MOVE_VELOCITY, 0.0)
                 return (-self.MOVE_VELOCITY, 0.0)
 
         return (0.0, 0.0)
 
 
 if __name__ == "__main__":
-    from mqtt import MQTT_Transmitter
-    from config import Config
-    from logic import Logic
-    from stt import STT
-    import time
-
-    # Configuration parameters
-    config = Config() # Load config variables from YAML file
-    mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)
-    logic = Logic(mqtt ,config.PAUSE_ITTERATIONS, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
-    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
-
-    # Load Whisper STT model
-    model = whisper.load_model()
-
-    string = "Stop"
-    for word in string.split():
-        whisper.add_transcription(word)
-        words = whisper.get_transcription()
-    while words:
-        whisper.print_transcription()
-        words = whisper.get_transcription()
-        payload, consumed = logic.handle_transcription(words)
-        if payload:
-            print("[Payload]:", payload)
-            velocities = logic.payload_to_velocities(payload)
-            print("[Velocities]:", velocities)
-            mqtt.publish_command(velocities[0], velocities[1])
-        if consumed:
-            print("[Consumed]:", consumed)
-            whisper.strip_transcription(consumed)
-
+    # Bare bones test setup
+    class MockTimer:
+        def stop_timer(self):
+            pass
+        def set_timer(self, operation, value):
+            pass
+    
+    # Initialize Logic
+    mock_timer = MockTimer()
+    logic = Logic(
+        move_timer=mock_timer,
+        PAUSE_ITTERATIONS=5,
+        DEFAULT_TURN_DEG=90.0,
+        DEFAULT_DISTANCE=1.0,
+        MOVE_VELOCITY=0.22,
+        TURN_VELOCITY=2.0,
+        DEBUG=False
+    )
+    
+    print("Enter command (or 'quit' to exit):")
+    
     try:
         while True:
-            time.sleep(1)
+            user_input = input("> ").strip()
+            
+            if user_input.lower() in ['quit', 'exit', 'q']:
+                break
+            
+            if not user_input:
+                continue
+            
+            words = user_input.lower().split()
+            payload = logic.handle_transcription(words)
+            
+            if payload:
+                velocities = logic.payload_to_velocities(payload)
+                print(f"Payload: {payload} → Velocities: {velocities}")
+            else:
+                print("No valid command")
+                
     except KeyboardInterrupt:
-        print("Exiting...")
-    finally:
-        mqtt.publish_command(0.0, 0.0)
+        print("\nExiting...")
