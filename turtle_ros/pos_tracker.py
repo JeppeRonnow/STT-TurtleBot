@@ -28,6 +28,7 @@ class Pos_tracker:
 
             # Check if the robot was stationary in the step
             if twist_msg.twist.linear.x == 0.0 and twist_msg.twist.angular.z == 0.0:
+                mqtt_transmit("movement", {"linear": 0.0, "angular": 0.0})
                 self.steps.pop()
                 continue
 
@@ -66,6 +67,7 @@ class Pos_tracker:
         twist_msg.twist.linear.x = float(0.0)
         twist_msg.twist.angular.z = float(0.0)
         publisher.publish(twist_msg)
+        mqtt_transmit("movement", {"linear": 0.0, "angular": 0.0})
         self.steps.clear()
 
     def save_step(self, twist_msg):
