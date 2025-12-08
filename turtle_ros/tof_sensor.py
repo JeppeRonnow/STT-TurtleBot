@@ -46,8 +46,8 @@ class ToFSensor:
         self.direction = ""
 
         # Create ROI for ledge and distance.
-        self.roi_ledge = VL53L1X.VL53L1xUserRoi(5, 15, 10, 13)
-        self.roi_distance = VL53L1X.VL53L1xUserRoi(0, 5, 15, 5)
+        self.roi_ledge = VL53L1X.VL53L1xUserRoi(6, 15, 9, 12)
+        self.roi_distance = VL53L1X.VL53L1xUserRoi(6, 3, 9, 0)
 
 
     # Start VL53L1X class
@@ -100,7 +100,7 @@ class ToFSensor:
                     tof.stop_ranging()
                     tof.set_user_roi(self.roi_ledge)
                     time.sleep(0.05)
-                    tof.start_ranging(1)
+                    tof.start_ranging(2)
                     time.sleep(0.06)
                     ledge_distance = int(tof.get_distance())
 
@@ -108,7 +108,7 @@ class ToFSensor:
                     tof.stop_ranging()
                     tof.set_user_roi(self.roi_distance)
                     time.sleep(0.05)
-                    tof.start_ranging(1)
+                    tof.start_ranging(2)
                     time.sleep(0.06)
                     distance = int(tof.get_distance())
 
@@ -133,7 +133,11 @@ class ToFSensor:
                     break
 
                 # Read distance from sensor
-                ledge_distance, distance = self.get_distance(which)
+                distance = self.get_distance(which)
+                if distance is None:
+                    pass
+
+                ledge_distance, distance = distance
 
                 if callback:
                     callback(which, distance)
@@ -141,7 +145,7 @@ class ToFSensor:
                     self.logger.info(f"{which}: {ledge_distance}mm, {distance}mm")
 
                 # Check if ledge disatnce is to high
-                if ledge_distance is not None and ledge_distance > 230:
+                if ledge_distance is not None and ledge_distance > 1500:
                     return True
 
                 # Check if distance is under collision range
