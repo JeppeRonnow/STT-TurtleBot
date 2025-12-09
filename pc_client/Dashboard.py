@@ -600,6 +600,14 @@ class Dashboard(ctk.CTk):
         self.canvas.draw_idle()
 
 
+    def set_recording(self, is_recording) -> None:
+        """Update recording status on dashboard"""
+        if is_recording:
+            self.status_label.configure(text="Status: Recording", text_color="#FF9800")  # Orange
+        else:
+            self.status_label.configure(text="Status: Idle", text_color="#4CAF50")  # Green
+
+
 if __name__ == "__main__":
     # Test the GUI
     app = Dashboard()

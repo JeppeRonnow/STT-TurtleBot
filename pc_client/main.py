@@ -24,14 +24,18 @@ def robot_loop(config, mqtt, logic, filter, audio, whisper, wakeWord, dashboard,
             wakeWord.await_wake_word()
 
             # Record audio and save
+            dashboard.set_recording(True)
             raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)
+            dashboard.set_recording(False)
+
+            # Save raw audio
             audio.save_audio(raw, "Raw.wav")
 
-            # Apply filters and save
+            # Apply filters and save audio
             filtered = filter.apply_filters(raw)
             audio.save_audio(filtered, "Filtered.wav")
 
-            # Normalize lightly to (-1,1)
+            # Normalize lightly to (-1,1) and save audio
             normalized = filter.normalize(filtered)
             audio.save_audio(normalized, "Normalized.wav")
             
