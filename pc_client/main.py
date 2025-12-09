@@ -59,7 +59,12 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
                     break
 
             # Save data tp sqlite database
-            sqlitedb.add_recording("Raw.wav", "Filtered.wav", "Normalized.wav", whisper.get_transcription())
+            sqlitedb.add_recording(
+                "../recordings/Raw.wav", 
+                "../recordings/Filtered.wav", 
+                "../recordings/Normalized.wav", 
+                " ".join(whisper.get_transcription())
+            )
 
         except KeyboardInterrupt:
             print("\n[Thread] Ctrl+C detected in thread")

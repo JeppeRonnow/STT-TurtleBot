@@ -28,4 +28,4 @@ ROBOT:
   TURN_VELOCITY: 2.0
 
 DB:
-  DB_PATH = "db.db"
+  DB_PATH: "db.db"
