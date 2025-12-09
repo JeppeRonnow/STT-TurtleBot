@@ -15,6 +15,9 @@ import numpy as np
 def robot_loop(config, mqtt, logic, filter, audio, whisper, wakeWord, dashboard, stop_event):
     print("[Thread] Robot controller started on thread:", threading.current_thread().name)
 
+    # Reset robot position
+    mqtt.reset_position()
+
     # Load Whisper model
     model = whisper.load_model()
 
@@ -45,22 +48,22 @@ def robot_loop(config, mqtt, logic, filter, audio, whisper, wakeWord, dashboard,
             dashboard.update_audio_recordings(raw, raw_time, filtered, filtered_time)
 
             # Run STT and update token buffer
-            whisper.transcribe(model, normalized)
+            whisper.transcribe(model, normalized, dashboard)
 
             # Handle commands from tokens
             while True:
                 whisper.print_transcription()
                 words = whisper.get_transcription()
                 whisper.strip_transcription()
+
                 payload = logic.handle_transcription(words)
-                if payload:
-                    if config.DEBUG:
-                        print("[Payload]:", payload)
-                    velocities = logic.payload_to_velocities(payload)
-                    mqtt.publish_command(velocities[0], velocities[1])
-                    #dashboard.update_last_command(velocities[0], velocities[1])
-                else:
+                if not payload:
                     break
+
+                if config.DEBUG: print("[Payload]:", payload)
+                velocities = logic.payload_to_velocities(payload)
+                mqtt.publish_command(velocities[0], velocities[1])
+
 
         except KeyboardInterrupt:
             print("\n[Thread] Ctrl+C detected in thread")

@@ -8,22 +8,24 @@ class Logic:
     # move_syn = {"move", "go", "walk", "drive"} Not currently in use
     turn_syn = {"turn", "rotate"}
     stop_syn = {"stop", "halt", "freeze", "wait", "pause"}
-    return_syn = {"return", "back"}
+    return_syn = {"return", "home"}
 
     dir_syn = {"left", "right"}
     fwd_syn = {"forward", "straight", "ahead"}
     back_syn = {"backward", "backwards", "reverse"}
 
-    numbers = {"one": 1,
-               "two": 2,
-               "three": 3,
-               "four": 4,
-               "five": 5,
-               "six": 6,
-               "seven": 7,
-               "eight": 8,
-               "nine": 9,
-               "ten": 10
+    replace = {"one": "1",
+               "two": "2",
+               "three": "3",
+               "four": "4",
+               "five": "5",
+               "six": "6",
+               "seven": "7",
+               "eight": "8",
+               "nine": "9",
+               "ten": "10",
+               "lift": "left",
+               "write": "right",
                }
 
     dist_units = {"mm", "millimeter", "millimeters", "cm", "centimeter", "centimeters", "m", "meter", "meters"}
@@ -104,8 +106,8 @@ class Logic:
     def format_numbers(self, words: List[str]) -> List[str]:
         formatted_words = []
         for word in words:
-            if word in self.numbers:
-                formatted_words.append(str(self.numbers[word]))
+            if word in self.replace:
+                formatted_words.append(self.replace[word])
             else:
                 formatted_words.append(word)
         return formatted_words
