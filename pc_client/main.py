@@ -24,6 +24,9 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
             # Wait for wake word
             wakeWord.await_wake_word()
 
+            # Start timer for benchmarking
+            start_time = time.perf_counter()
+
             # Record audio and save
             raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)
             audio.save_audio(raw, "Raw.wav")
@@ -35,7 +38,7 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
             # Normalize lightly to (-1,1)
             normalized = filter.normalize(filtered)
             audio.save_audio(normalized, "Normalized.wav")
-            
+
             # Update dashboard with audio recordings
             raw_time = np.arange(len(raw)) / config.SAMPLE_RATE
             filtered_time = np.arange(len(filtered)) / config.SAMPLE_RATE
@@ -59,12 +62,16 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
                 else:
                     break
 
-            # Save data tp sqlite database
+                end_time = time.perf_counter()
+                elapsed_ms = (end_time - start_time) * 1000
+
+            # Save data in sqlite database
             sqlitedb.add_recording(
-                str(audio.folder / "Raw.wav"), 
-                str(audio.folder / "Filtered.wav"), 
-                str(audio.folder / "Normalized.wav"), 
-                transcription_text
+                str(audio.folder / "Raw.wav"),
+                str(audio.folder / "Filtered.wav"),
+                str(audio.folder / "Normalized.wav"),
+                transcription_text,
+                elapsed_ms
             )
 
         except KeyboardInterrupt:

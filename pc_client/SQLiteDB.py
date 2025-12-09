@@ -36,6 +36,7 @@ class SQLiteDB:
             filterAudio BLOB NOT NULL,
             normalizedAudio BLOB NOT NULL,
             transcribe TEXT NOT NULL,
+            elapsedtime INT NOT NULL,
             created_at TIMESTAMPT DEFAULT CURRENT_TIMESTAMP
         )
         """
@@ -69,7 +70,7 @@ class SQLiteDB:
 
 
     # Saves audio and transcribe
-    def add_recording(self, raw_wav_path: str, filtered_wav_path: str, normalized_wav_path: str, transcribe: str) -> int:
+    def add_recording(self, raw_wav_path: str, filtered_wav_path: str, normalized_wav_path: str, transcribe: str, elapsedtime: int) -> int:
         with open(raw_wav_path, "rb") as f:
             raw_bytes = f.read()
 
@@ -80,11 +81,11 @@ class SQLiteDB:
             normalized_bytes = f.read()
 
         query = """
-        INSERT INTO recordings (rawAudio, filterAudio, normalizedAudio, transcribe)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO recordings (rawAudio, filterAudio, normalizedAudio, transcribe, elapsedtime)
+        VALUES (?, ?, ?, ?, ?)
         """
 
-        return self.execute(query, (raw_bytes, filtered_bytes, normalized_bytes, transcribe))
+        return self.execute(query, (raw_bytes, filtered_bytes, normalized_bytes, transcribe, elapsedtime))
 
 
     # Restore .WAV files from the database
@@ -143,7 +144,7 @@ if __name__ == '__main__':
     # Else print all entries key transcript and timestamp
     else:
         for r in rows:
-            print(f"ID: {r['id']}\n Transcript: {r['transcribe']}\n Timestamp: {r['created_at']}\n")
+            print(f"ID: {r['id']}\n Transcript: {r['transcribe']}\n Execution time: {r['elapsedtime']}ms\n Timestamp: {r['created_at']}\n")
 
         # Ask user which entry to restore the audio from
         choice = input("Enter an ID to restore WAV files (or press Enter to exit): ").strip()
