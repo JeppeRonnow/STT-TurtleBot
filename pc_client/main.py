@@ -54,7 +54,7 @@ def robot_loop(config, mqtt, logic, filter, audio, whisper, wakeWord, dashboard,
                         print("[Payload]:", payload)
                     velocities = logic.payload_to_velocities(payload)
                     mqtt.publish_command(velocities[0], velocities[1])
-                    dashboard.update_last_command(velocities[0], velocities[1])
+                    #dashboard.update_last_command(velocities[0], velocities[1])
                 else:
                     break
 
@@ -81,7 +81,7 @@ def main():
     logic = Logic(mqtt, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
     filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.FILTER_ORDER, config.DEBUG)
     audio = Record(config.SAMPLE_RATE, config.DEBUG)
-    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.MAX_BUFFER_LENGTH, config.DEBUG)
+    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.DEBUG)
     wakeWord = WakeWord(mqtt, config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.WAKE_WORD_COOLDOWN, config.DEBUG)
     
     # Create Dashboard first with MQTT transmitter reference

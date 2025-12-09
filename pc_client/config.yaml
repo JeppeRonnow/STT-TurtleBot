@@ -13,7 +13,6 @@ AUDIO:
 WHISPER:
   MODEL_NAME: "tiny.en"
   MODEL_DEVICE: "cpu"
-  MAX_BUFFER_LENGTH: 10
 
 WAKE_WORD:
   MODEL_PATH: ["wake_word/Turtlebot-2.onnx", "wake_word/Stop.onnx"]

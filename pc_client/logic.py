@@ -189,13 +189,12 @@ if __name__ == "__main__":
     from config import Config
     from logic import Logic
     from stt import STT
-    import time
 
     # Configuration parameters
     config = Config() # Load config variables from YAML file
     mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)
     logic = Logic(mqtt , config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
-    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
+    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.DEBUG)  # Speach to Text
 
     # Load Whisper STT model
     model = whisper.load_model()
