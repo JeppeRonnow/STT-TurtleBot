@@ -48,6 +48,7 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
             while running_flag[0]:
                 whisper.print_transcription()
                 words = whisper.get_transcription()
+                transcription_text = " ".join(words)  # Save before stripping
                 whisper.strip_transcription()
                 payload = logic.handle_transcription(words)
                 if payload:
@@ -60,10 +61,10 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
 
             # Save data tp sqlite database
             sqlitedb.add_recording(
-                "../recordings/Raw.wav", 
-                "../recordings/Filtered.wav", 
-                "../recordings/Normalized.wav", 
-                " ".join(whisper.get_transcription())
+                str(audio.folder / "Raw.wav"), 
+                str(audio.folder / "Filtered.wav"), 
+                str(audio.folder / "Normalized.wav"), 
+                transcription_text
             )
 
         except KeyboardInterrupt:
