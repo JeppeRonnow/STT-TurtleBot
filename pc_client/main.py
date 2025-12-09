@@ -7,14 +7,16 @@ from move_timer import Move_Timer
 from mqtt import MQTT_Transmitter
 from record import Record
 from stt import STT, WakeWord
+from SQLiteDB import SQLiteDB
 
 from mqtt_receiver import MQTT_Receiver
 import sounddevice as sd
 import numpy as np
 import queue
 import time
-# robot control thread
-def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, dashboard):
+
+# robot control thread:wav
+def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, dashboard, sqlitedb):
     print("[Thread] Robot controller started on thread:", threading.current_thread().name)
 
     while running_flag[0]:
@@ -56,6 +58,9 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
                 else:
                     break
 
+            # Save data tp sqlite database
+            sqlitedb.add_recording("Raw.wav", "Filtered.wav", "Normalized.wav", whisper.get_transcription())
+
         except KeyboardInterrupt:
             print("\n[Thread] Ctrl+C detected in thread")
             running_flag[0] = False
@@ -83,6 +88,7 @@ def main():
     audio = Record(config.SAMPLE_RATE, config.DEBUG)
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.MAX_BUFFER_LENGTH, config.DEBUG)
     wakeWord = WakeWord(mqtt, config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.WAKE_WORD_COOLDOWN, config.DEBUG)
+    sqlitedb = SQLiteDB(config.DB_PATH)
 
     # Load Whisper model
     model = whisper.load_model()
@@ -102,7 +108,7 @@ def main():
     # Start robot control thread
     thread = threading.Thread(
         target=robot_loop,
-        args=(running, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, app),
+        args=(running, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, app, sqlitedb),
         name="RobotControllerThread",
         daemon=True
     )
