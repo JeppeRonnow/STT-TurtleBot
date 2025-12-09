@@ -54,6 +54,19 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
                 transcription_text = " ".join(words)  # Save before stripping
                 whisper.strip_transcription()
                 payload = logic.handle_transcription(words)
+                
+                end_time = time.perf_counter()
+                elapsed_ms = (end_time - start_time) * 1000
+
+                # Save data in sqlite database
+                sqlitedb.add_recording(
+                    str(audio.folder / "Raw.wav"),
+                    str(audio.folder / "Filtered.wav"),
+                    str(audio.folder / "Normalized.wav"),
+                    transcription_text,
+                    elapsed_ms
+                )
+                
                 if payload:
                     if config.DEBUG:
                         print("[Payload]:", payload)
@@ -61,18 +74,6 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
                     mqtt.publish_command(velocities[0], velocities[1])
                 else:
                     break
-
-                end_time = time.perf_counter()
-                elapsed_ms = (end_time - start_time) * 1000
-
-            # Save data in sqlite database
-            sqlitedb.add_recording(
-                str(audio.folder / "Raw.wav"),
-                str(audio.folder / "Filtered.wav"),
-                str(audio.folder / "Normalized.wav"),
-                transcription_text,
-                elapsed_ms
-            )
 
         except KeyboardInterrupt:
             print("\n[Thread] Ctrl+C detected in thread")
