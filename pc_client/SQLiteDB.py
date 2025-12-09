@@ -134,7 +134,7 @@ if __name__ == '__main__':
     print("\n--- DATABASE ENTRIES ---")
 
     # Get entries in the database
-    rows = db.fetchall("SELECT id, transcribe, created_at, FROM recordings")
+    rows = db.fetchall("SELECT id, transcribe, created_at FROM recordings")
 
     # IF their is no entries
     if not rows:
