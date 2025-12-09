@@ -98,6 +98,7 @@ class ToFSensor:
                 try:
                     # get ditance to ledge
                     tof.stop_ranging()
+                    time.sleep(0.1)
                     tof.set_user_roi(self.roi_ledge)
                     time.sleep(0.05)
                     tof.start_ranging(2)
@@ -106,6 +107,7 @@ class ToFSensor:
 
                     # Get distabce to obstacle
                     tof.stop_ranging()
+                    time.sleep(0.1)
                     tof.set_user_roi(self.roi_distance)
                     time.sleep(0.05)
                     tof.start_ranging(2)
@@ -145,7 +147,7 @@ class ToFSensor:
                     self.logger.info(f"{which}: {ledge_distance}mm, {distance}mm")
 
                 # Check if ledge disatnce is to high
-                if ledge_distance is not None and ledge_distance > 1500:
+                if ledge_distance is not None and ledge_distance > 950:
                     return True
 
                 # Check if distance is under collision range
@@ -156,6 +158,7 @@ class ToFSensor:
 
         except KeyboardInterrupt:
             pass
+
 
     # Enable reading on desired sensor
     def enable(self, linear_vel):
