@@ -30,8 +30,7 @@ class Logic:
 
 
     # Object init
-    def __init__(self, move_timer, PAUSE_ITTERATIONS, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
-        self.PAUSE_ITTERATIONS = PAUSE_ITTERATIONS
+    def __init__(self, move_timer, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
         self.DEFAULT_TURN_DEG = DEFAULT_TURN_DEG
         self.DEFAULT_DISTANCE = DEFAULT_DISTANCE
         self.MOVE_VELOCITY = MOVE_VELOCITY
@@ -186,27 +185,38 @@ class Logic:
 
 
 if __name__ == "__main__":
-    # Bare bones test setup
-    class MockTimer:
-        def stop_timer(self):
-            pass
-        def set_timer(self, operation, value):
-            pass
-    
-    # Initialize Logic
-    mock_timer = MockTimer()
-    logic = Logic(
-        move_timer=mock_timer,
-        PAUSE_ITTERATIONS=5,
-        DEFAULT_TURN_DEG=90.0,
-        DEFAULT_DISTANCE=1.0,
-        MOVE_VELOCITY=0.22,
-        TURN_VELOCITY=2.0,
-        DEBUG=False
-    )
-    
-    print("Enter command (or 'quit' to exit):")
-    
+    from mqtt import MQTT_Transmitter
+    from config import Config
+    from logic import Logic
+    from stt import STT
+    import time
+
+    # Configuration parameters
+    config = Config() # Load config variables from YAML file
+    mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)
+    logic = Logic(mqtt , config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
+    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
+
+    # Load Whisper STT model
+    model = whisper.load_model()
+
+    string = "Stop"
+    for word in string.split():
+        whisper.add_transcription(word)
+        words = whisper.get_transcription()
+    while words:
+        whisper.print_transcription()
+        words = whisper.get_transcription()
+        payload, consumed = logic.handle_transcription(words)
+        if payload:
+            print("[Payload]:", payload)
+            velocities = logic.payload_to_velocities(payload)
+            print("[Velocities]:", velocities)
+            mqtt.publish_command(velocities[0], velocities[1])
+        if consumed:
+            print("[Consumed]:", consumed)
+            whisper.strip_transcription(consumed)
+
     try:
         while True:
             user_input = input("> ").strip()
