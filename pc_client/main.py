@@ -54,6 +54,7 @@ def robot_loop(config, mqtt, logic, filter, audio, whisper, wakeWord, dashboard,
                         print("[Payload]:", payload)
                     velocities = logic.payload_to_velocities(payload)
                     mqtt.publish_command(velocities[0], velocities[1])
+                    dashboard.update_last_command(velocities[0], velocities[1])
                 else:
                     break
 
@@ -84,7 +85,7 @@ def main():
     wakeWord = WakeWord(mqtt, config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.WAKE_WORD_COOLDOWN, config.DEBUG)
     
     # Create Dashboard first with MQTT transmitter reference
-    app = Dashboard(mqtt_transmitter=mqtt)
+    app = Dashboard(mqtt)
     
     # Initialize MQTT Receiver with dashboard reference
     reciever = MQTT_Receiver(config.SERVER, config.DEBUG, app)

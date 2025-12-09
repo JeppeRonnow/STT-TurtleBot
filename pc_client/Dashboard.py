@@ -1,7 +1,8 @@
-import customtkinter as ctk
 import matplotlib.patches as patches
+import customtkinter as ctk
 import numpy as np
 import time
+
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
@@ -35,9 +36,9 @@ class Dashboard(ctk.CTk):
         self.command_history = []  # List of (timestamp, linear, angular) tuples
         self.max_history_entries = 10
 
-        # Configure grid layout (left panel wider than right)
-        self.grid_columnconfigure(0, weight=2)
-        self.grid_columnconfigure(1, weight=1)
+        # Configure grid layout (left panel and right panel equal size)
+        self.grid_columnconfigure(0, weight=1)  # Left panel weight
+        self.grid_columnconfigure(1, weight=1)  # Right panel weight
         self.grid_rowconfigure(0, weight=1)
 
         # Create left panel for robot position
@@ -49,6 +50,28 @@ class Dashboard(ctk.CTk):
         self.left_panel.grid_rowconfigure(1, weight=2)  # 2D visualization
         self.left_panel.grid_rowconfigure(2, weight=1)  # Position data
         self.left_panel.grid_columnconfigure(0, weight=1)
+
+        # Create right panel for plots
+        self.right_panel = ctk.CTkFrame(self, corner_radius=10)
+        self.right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+
+        # Configure right panel grid (3 rows: STOP button, command history, audio plots)
+        self.right_panel.grid_rowconfigure(0, weight=0)  # STOP button (fixed height)
+        self.right_panel.grid_rowconfigure(1, weight=1)  # Command history
+        self.right_panel.grid_rowconfigure(2, weight=1)  # Audio plots
+        self.right_panel.grid_columnconfigure(0, weight=1)
+
+        # Create STOP button at top of right panel (full width)
+        self.stop_button = ctk.CTkButton(
+            self.right_panel,
+            text="EMERGENCY STOP",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            fg_color="#F44336",
+            hover_color="#D32F2F",
+            height=60,
+            command=self.emergency_stop,
+        )
+        self.stop_button.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
         # Left panel header
         self.position_label = ctk.CTkLabel(
@@ -163,18 +186,9 @@ class Dashboard(ctk.CTk):
         )
         self.status_label.pack(padx=20, pady=(10, 30))
 
-        # Create right panel for plots
-        self.right_panel = ctk.CTkFrame(self, corner_radius=10)
-        self.right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
-
-        # Configure right panel grid (2 rows for 2 plots)
-        self.right_panel.grid_rowconfigure(0, weight=1)
-        self.right_panel.grid_rowconfigure(1, weight=1)
-        self.right_panel.grid_columnconfigure(0, weight=1)
-
-        # Create frame for command history (top)
+        # Create frame for command history (now in row 1)
         self.cmd_history_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
-        self.cmd_history_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        self.cmd_history_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
 
         # Command History header
         self.cmd_history_label = ctk.CTkLabel(
@@ -205,6 +219,18 @@ class Dashboard(ctk.CTk):
             label.pack(fill="x", padx=5, pady=2)
             self.cmd_labels.append(label)
 
+        # Create frame for audio plots (now in row 2)
+        self.audio_plot_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
+        self.audio_plot_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+
+        # Audio Plot header
+        self.audio_plot_label = ctk.CTkLabel(
+            self.audio_plot_frame,
+            text="Audio Recordings",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        self.audio_plot_label.pack(padx=10, pady=(10, 5))
+
         # Create matplotlib figure with 1 subplot (just microphone)
         self.figure = Figure(figsize=(6, 4), dpi=100)
         self.figure.patch.set_facecolor("#2b2b2b")
@@ -214,7 +240,7 @@ class Dashboard(ctk.CTk):
         self.ax_mic.set_facecolor("#1e1e1e")
         self._style_axis(self.ax_mic)
         self.ax_mic.set_title(
-            "Audio Recordings (Raw vs Filtered)", color="white", fontsize=12
+            "Raw & Filtered Audio", color="white", fontsize=12
         )
         self.ax_mic.set_xlabel("Time (s)", color="white")
         self.ax_mic.set_ylabel("Amplitude", color="white")
@@ -222,7 +248,7 @@ class Dashboard(ctk.CTk):
         self.ax_mic.set_xlim(0, 3)  # Default 3 seconds
         self.ax_mic.grid(True, alpha=0.3, color="white")
 
-        # Initialize empty plot lines for 3 recordings
+        # Initialize empty plot lines for 2 recordings
         (self.raw_line,) = self.ax_mic.plot(
             [], [],
             color="#FF5722",
@@ -245,28 +271,15 @@ class Dashboard(ctk.CTk):
             labelcolor="white",
         )
 
-        # Adjust spacing between subplots
-        self.figure.tight_layout(pad=3.0)
+        # Adjust spacing
+        self.figure.tight_layout(pad=1.0)
 
-        # Create canvas and add to right panel (bottom half)
-        self.canvas = FigureCanvasTkAgg(self.figure, master=self.right_panel)
+        # Create canvas and add to audio plot frame
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.audio_plot_frame)
         self.canvas.draw()
-        self.canvas.get_tk_widget().grid(
-            row=1, column=0, padx=10, pady=10, sticky="nsew"
+        self.canvas.get_tk_widget().pack(
+            fill="both", expand=True, padx=10, pady=(5, 10)
         )
-
-        # Create stop button in absolute top right corner
-        self.stop_button = ctk.CTkButton(
-            self,
-            text="STOP",
-            font=ctk.CTkFont(size=18, weight="bold"),
-            fg_color="#F44336",
-            hover_color="#D32F2F",
-            width=120,
-            height=50,
-            command=self.emergency_stop,
-        )
-        self.stop_button.place(relx=1.0, rely=0.0, x=-15, y=15, anchor="ne")
 
     def _style_axis(self, ax):
         """Apply consistent dark theme styling to an axis"""
