@@ -1,5 +1,6 @@
 import sqlite3
 from typing import Any, Iterable, List, Tuple, Optional
+import time
 import os
 
 
@@ -36,6 +37,7 @@ class SQLiteDB:
             filterAudio BLOB NOT NULL,
             normalizedAudio BLOB NOT NULL,
             transcribe TEXT NOT NULL,
+            payload TEXT NOT NULL,
             elapsedtime INT NOT NULL,
             created_at TIMESTAMPT DEFAULT CURRENT_TIMESTAMP
         )
@@ -70,7 +72,7 @@ class SQLiteDB:
 
 
     # Saves audio and transcribe
-    def add_recording(self, raw_wav_path: str, filtered_wav_path: str, normalized_wav_path: str, transcribe: str, elapsedtime: int) -> int:
+    def add_recording(self, raw_wav_path: str, filtered_wav_path: str, normalized_wav_path: str, transcribe: str, payload: str, elapsedtime: int) -> int:
         with open(raw_wav_path, "rb") as f:
             raw_bytes = f.read()
 
@@ -81,11 +83,12 @@ class SQLiteDB:
             normalized_bytes = f.read()
 
         query = """
-        INSERT INTO recordings (rawAudio, filterAudio, normalizedAudio, transcribe, elapsedtime)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO recordings (rawAudio, filterAudio, normalizedAudio, transcribe, payload, elapsedtime)
+        VALUES (?, ?, ?, ?, ?, ?)
         """
 
-        return self.execute(query, (raw_bytes, filtered_bytes, normalized_bytes, transcribe, elapsedtime))
+        return self.execute(query, (raw_bytes, filtered_bytes, normalized_bytes, transcribe, payload, elapsedtime))
+
 
 
     # Restore .WAV files from the database
@@ -125,6 +128,23 @@ class SQLiteDB:
     # Exit function
     def __exit__(self, exc_type, exc, tb):
          self.close()
+
+
+    def save_data(self, start_time, audio, transcription_text, payload):
+        # Save data in sqlite database
+        try:
+            end_time = time.perf_counter()
+            elapsed_ms = (end_time - start_time) * 1000
+            self.add_recording(
+                str(audio.folder / "Raw.wav"),
+                str(audio.folder / "Filtered.wav"),
+                str(audio.folder / "Normalized.wav"),
+                transcription_text,
+                payload,
+                elapsed_ms
+            )
+        except Exception as e:
+            print(f"[SQLiteDB] Error saving recording to database: {e}")
 
 
 # If run as main works as a DB browser tool

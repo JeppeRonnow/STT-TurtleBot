@@ -55,12 +55,13 @@ class Dashboard(ctk.CTk):
         self.right_panel = ctk.CTkFrame(self, corner_radius=10)
         self.right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
 
-        # Configure right panel grid (3 rows: STOP button, command history, audio plots)
-        self.right_panel.grid_rowconfigure(0, weight=0)  # STOP button (fixed height)
+        # Configure right panel grid (3 rows: buttons row, command history, audio plots)
+        self.right_panel.grid_rowconfigure(0, weight=0)  # Buttons (fixed height)
         self.right_panel.grid_rowconfigure(1, weight=1)  # Command history
         self.right_panel.grid_rowconfigure(2, weight=0)  # Transcription field
         self.right_panel.grid_rowconfigure(3, weight=1)  # Audio plots
-        self.right_panel.grid_columnconfigure(0, weight=1)
+        self.right_panel.grid_columnconfigure(0, weight=1)  # Left column for RESET
+        self.right_panel.grid_columnconfigure(1, weight=1)  # Right column for STOP
 
 
         # -------------------------------------------------- #
@@ -185,21 +186,34 @@ class Dashboard(ctk.CTk):
         # ------------------- RIGHT PANEL ------------------- #
         # --------------------------------------------------- #
         
-        # Create STOP button at top of right panel (full width)
+
+        # Create Reset button at top left of right panel
+        self.reset_button = ctk.CTkButton(
+            self.right_panel,
+            text="RESET",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            fg_color="#6495ED", # Blue
+            hover_color="#0047AB",
+            height=60,
+            command=self.reset_position,
+        )
+        self.reset_button.grid(row=0, column=0, padx=(10, 5), pady=10, sticky="ew")
+
+        # Create STOP button at top right of right panel
         self.stop_button = ctk.CTkButton(
             self.right_panel,
-            text="EMERGENCY STOP",
+            text="STOP",
             font=ctk.CTkFont(size=20, weight="bold"),
             fg_color="#F44336",
             hover_color="#D32F2F",
             height=60,
             command=self.emergency_stop,
         )
-        self.stop_button.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+        self.stop_button.grid(row=0, column=1, padx=(5, 10), pady=10, sticky="ew")
 
-        # Create frame for command history (row 1)
+        # Create frame for command history (row 1, spanning both columns)
         self.cmd_history_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
-        self.cmd_history_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+        self.cmd_history_frame.grid(row=1, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
 
         # Command History header
         self.cmd_history_label = ctk.CTkLabel(
@@ -230,9 +244,9 @@ class Dashboard(ctk.CTk):
             label.pack(fill="x", padx=5, pady=2)
             self.cmd_labels.append(label)
 
-        # Transcription display frame (row 2)
+        # Transcription display frame (row 2, spanning both columns)
         self.transcription_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
-        self.transcription_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+        self.transcription_frame.grid(row=2, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
 
         # Transcription header
         self.transcription_header = ctk.CTkLabel(
@@ -252,9 +266,9 @@ class Dashboard(ctk.CTk):
         )
         self.transcription_label.pack(padx=10, pady=10)
 
-        # Create frame for audio plots (row 3)
+        # Create frame for audio plots (row 3, spanning both columns)
         self.audio_plot_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
-        self.audio_plot_frame.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
+        self.audio_plot_frame.grid(row=3, column=0, columnspan=2, padx=10, pady=10, sticky="nsew")
 
         # Audio Plot header
         self.audio_plot_label = ctk.CTkLabel(
@@ -362,6 +376,7 @@ class Dashboard(ctk.CTk):
         if self.mqtt_transmitter:
             self.mqtt_transmitter.publish_command(0.0, 0.0)
             self.status_label.configure(text="Status: Stopping", text_color="#F44336") # Red
+            time.sleep(0.5)  # Wait a moment to ensure stop command is processed
         else:
             print("Warning: No MQTT transmitter available")
 
@@ -615,6 +630,22 @@ class Dashboard(ctk.CTk):
     def set_transcription(self, transcription: str) -> None:
         """Update transcription display on dashboard"""
         self.transcription_label.configure(text=transcription)
+
+
+    def reset_position(self) -> None:
+        """Reset robot position to origin on dashboard"""
+        # Send stop command (0 velocity) to robot via MQTT
+        if self.mqtt_transmitter:
+            self.mqtt_transmitter.reset_position()
+            self.status_label.configure(text="Status: Stopping", text_color="#F44336") # Red
+            time.sleep(0.5)  # Wait a moment to ensure stop command is processed
+        else:
+            print("Warning: No MQTT transmitter available")
+
+        # Also stop any ongoing animation
+        self.update_robot_position(0.0, 0.0, 0.0)
+        self.update_robot_velocity(0.0, 0.0)
+        
 
 
 if __name__ == "__main__":

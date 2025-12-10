@@ -10,14 +10,13 @@ import threading
 
 from mqtt_receiver import MQTT_Receiver
 import numpy as np
-import queue
 import time
 
 # robot control thread:wav
-def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, dashboard, sqlitedb):
+def robot_loop(config, mqtt, logic, filter, audio, whisper, wakeWord, dashboard, sqlitedb, stop_event):
     print("[Thread] Robot controller started on thread:", threading.current_thread().name)
 
-    # Reset robot position
+    # Reset robot position on boot
     mqtt.reset_position()
 
     # Load Whisper model
@@ -64,29 +63,16 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
 
                 payload = logic.handle_transcription(words)
                 
-                end_time = time.perf_counter()
-                elapsed_ms = (end_time - start_time) * 1000
-
-                # Save data in sqlite database
-                sqlitedb.add_recording(
-                    str(audio.folder / "Raw.wav"),
-                    str(audio.folder / "Filtered.wav"),
-                    str(audio.folder / "Normalized.wav"),
-                    transcription_text,
-                    elapsed_ms
-                )
-                
                 if payload:
-                    if config.DEBUG:
-                        print("[Payload]:", payload)
+                    if config.DEBUG: print("[Payload]:", payload)
                     velocities = logic.payload_to_velocities(payload)
                     mqtt.publish_command(velocities[0], velocities[1])
-                else:
-                    break
+                    sqlitedb.save_data(start_time, audio, transcription_text, payload)
 
-                if config.DEBUG: print("[Payload]:", payload)
-                velocities = logic.payload_to_velocities(payload)
-                mqtt.publish_command(velocities[0], velocities[1])
+                else:
+                    sqlitedb.save_data(start_time, audio, transcription_text, "N/A")
+                    break
+                
 
 
         except KeyboardInterrupt:
@@ -115,11 +101,6 @@ def main():
     whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.DEBUG)
     wakeWord = WakeWord(mqtt, config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.WAKE_WORD_COOLDOWN, config.DEBUG)
     sqlitedb = SQLiteDB(config.DB_PATH)
-
-    # Load Whisper model
-    model = whisper.load_model()
-    
-    # Create Dashboard first with MQTT transmitter reference
     app = Dashboard(mqtt)
     
     # Initialize MQTT Receiver with dashboard reference
@@ -132,7 +113,7 @@ def main():
     # Start robot control thread
     thread = threading.Thread(
         target=robot_loop,
-        args=(running, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, app, sqlitedb),
+        args=(config, mqtt, logic, filter, audio, whisper, wakeWord, app, sqlitedb, stop_event),
         name="RobotControllerThread",
         daemon=True
     )

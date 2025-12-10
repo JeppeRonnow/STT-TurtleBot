@@ -124,7 +124,7 @@ class ToFSensor:
 
 
     # Continuous sensor read in a blocking way
-    def stream(self, which, interval=0.05, callback=None):
+    def stream(self, which, interval=0.0, callback=None):
         # Clear flag
         self.collision_thread_flag.clear()
 
@@ -148,13 +148,16 @@ class ToFSensor:
 
                 # Check if ledge disatnce is to high
                 if ledge_distance is not None and ledge_distance > 950:
+                    self.logger.info("Ledge detected!")
                     return True
 
                 # Check if distance is under collision range
                 if distance is not None and distance < 300:
+                    self.logger.info("Wall detected!")
                     return True
 
-                time.sleep(interval)  # Wait for reading interval
+                if interval > 0.0:
+                    time.sleep(interval)  # Wait for reading interval
 
         except KeyboardInterrupt:
             pass

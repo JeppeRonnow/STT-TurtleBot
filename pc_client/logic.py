@@ -26,6 +26,7 @@ class Logic:
                "ten": "10",
                "lift": "left",
                "write": "right",
+               "half": "0.5",
                }
 
     dist_units = {"mm", "millimeter", "millimeters", "cm", "centimeter", "centimeters", "m", "meter", "meters"}
