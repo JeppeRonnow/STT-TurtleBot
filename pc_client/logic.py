@@ -8,36 +8,38 @@ class Logic:
     # move_syn = {"move", "go", "walk", "drive"} Not currently in use
     turn_syn = {"turn", "rotate"}
     stop_syn = {"stop", "halt", "freeze", "wait", "pause"}
-    return_syn = {"return", "back"}
+    return_syn = {"return", "home"}
 
     dir_syn = {"left", "right"}
     fwd_syn = {"forward", "straight", "ahead"}
     back_syn = {"backward", "backwards", "reverse"}
 
-    numbers = {"one": 1,
-               "two": 2,
-               "three": 3,
-               "four": 4,
-               "five": 5,
-               "six": 6,
-               "seven": 7,
-               "eight": 8,
-               "nine": 9,
-               "ten": 10
+    replace = {"one": "1",
+               "two": "2",
+               "three": "3",
+               "four": "4",
+               "five": "5",
+               "six": "6",
+               "seven": "7",
+               "eight": "8",
+               "nine": "9",
+               "ten": "10",
+               "lift": "left",
+               "write": "right",
                }
 
     dist_units = {"mm", "millimeter", "millimeters", "cm", "centimeter", "centimeters", "m", "meter", "meters"}
 
 
     # Object init
-    def __init__(self, move_timer, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
+    def __init__(self, mqtt, DEFAULT_TURN_DEG, DEFAULT_DISTANCE, MOVE_VELOCITY, TURN_VELOCITY, DEBUG) -> None:
         self.DEFAULT_TURN_DEG = DEFAULT_TURN_DEG
         self.DEFAULT_DISTANCE = DEFAULT_DISTANCE
         self.MOVE_VELOCITY = MOVE_VELOCITY
         self.TURN_VELOCITY = TURN_VELOCITY
         self.DEBUG = DEBUG
 
-        self.timer = move_timer
+        self.timer = Move_Timer(mqtt, MOVE_VELOCITY, TURN_VELOCITY, DEBUG)
 
         if self.DEBUG: print(f"[Logic class initialized]")
 
@@ -104,8 +106,8 @@ class Logic:
     def format_numbers(self, words: List[str]) -> List[str]:
         formatted_words = []
         for word in words:
-            if word in self.numbers:
-                formatted_words.append(str(self.numbers[word]))
+            if word in self.replace:
+                formatted_words.append(self.replace[word])
             else:
                 formatted_words.append(word)
         return formatted_words
@@ -189,13 +191,12 @@ if __name__ == "__main__":
     from config import Config
     from logic import Logic
     from stt import STT
-    import time
 
     # Configuration parameters
     config = Config() # Load config variables from YAML file
     mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)
     logic = Logic(mqtt , config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)                                # Logic control
-    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.MAX_BUFFER_LENGTH, config.DEBUG)  # Speach to Text
+    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.BUFFER_SECONDS, config.SAMPLE_RATE, config.DEBUG)  # Speach to Text
 
     # Load Whisper STT model
     model = whisper.load_model()

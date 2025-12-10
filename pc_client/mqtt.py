@@ -72,6 +72,11 @@ class MQTT_Transmitter:
             print(f"Published to {self.MQTT_TOPIC}: {payload}")
 
 
+    def reset_position(self) -> None:
+        # Special command to reset robot position
+        self.publish_command(99.99, 99.99)
+
+
 # Test code if class is run as main
 if __name__ == "__main__":
     # Get mqtt host information

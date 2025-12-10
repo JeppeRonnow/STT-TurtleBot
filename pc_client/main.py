@@ -1,16 +1,14 @@
-import threading
-from config import Config
-from Dashboard import Dashboard
-from dsp import DSP
-from logic import Logic
-from move_timer import Move_Timer
 from mqtt import MQTT_Transmitter
-from record import Record
+from Dashboard import Dashboard
 from stt import STT, WakeWord
 from SQLiteDB import SQLiteDB
+from config import Config
+from record import Record
+from logic import Logic
+from dsp import DSP
+import threading
 
 from mqtt_receiver import MQTT_Receiver
-import sounddevice as sd
 import numpy as np
 import queue
 import time
@@ -19,7 +17,13 @@ import time
 def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whisper, wakeWord, model, dashboard, sqlitedb):
     print("[Thread] Robot controller started on thread:", threading.current_thread().name)
 
-    while running_flag[0]:
+    # Reset robot position
+    mqtt.reset_position()
+
+    # Load Whisper model
+    model = whisper.load_model()
+
+    while not stop_event.is_set():
         try:
             # Wait for wake word
             wakeWord.await_wake_word()
@@ -28,14 +32,18 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
             start_time = time.perf_counter()
 
             # Record audio and save
+            dashboard.set_recording(True)
             raw = audio.record_audio(config.CHUNK_SECONDS, config.AUDIO_DEVICE)
+            dashboard.set_recording(False)
+
+            # Save raw audio
             audio.save_audio(raw, "Raw.wav")
 
-            # Apply filters and save
+            # Apply filters and save audio
             filtered = filter.apply_filters(raw)
             audio.save_audio(filtered, "Filtered.wav")
 
-            # Normalize lightly to (-1,1)
+            # Normalize lightly to (-1,1) and save audio
             normalized = filter.normalize(filtered)
             audio.save_audio(normalized, "Normalized.wav")
 
@@ -45,14 +53,15 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
             dashboard.update_audio_recordings(raw, raw_time, filtered, filtered_time)
 
             # Run STT and update token buffer
-            whisper.transcribe(model, normalized)
+            whisper.transcribe(model, normalized, dashboard)
 
             # Handle commands from tokens
-            while running_flag[0]:
+            while True:
                 whisper.print_transcription()
                 words = whisper.get_transcription()
                 transcription_text = " ".join(words)  # Save before stripping
                 whisper.strip_transcription()
+
                 payload = logic.handle_transcription(words)
                 
                 end_time = time.perf_counter()
@@ -75,9 +84,13 @@ def robot_loop(running_flag, config, mqtt, move_timer, logic, filter, audio, whi
                 else:
                     break
 
+                if config.DEBUG: print("[Payload]:", payload)
+                velocities = logic.payload_to_velocities(payload)
+                mqtt.publish_command(velocities[0], velocities[1])
+
+
         except KeyboardInterrupt:
             print("\n[Thread] Ctrl+C detected in thread")
-            running_flag[0] = False
             break
 
         except Exception as e:
@@ -96,11 +109,10 @@ def main():
     # Configuration and init objects
     config = Config()
     mqtt = MQTT_Transmitter(config.SERVER, config.DEBUG)
-    move_timer = Move_Timer(mqtt, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
-    logic = Logic(move_timer, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
+    logic = Logic(mqtt, config.DEFAULT_TURN_DEG, config.DEFAULT_DISTANCE, config.MOVE_VELOCITY, config.TURN_VELOCITY, config.DEBUG)
     filter = DSP(config.SAMPLE_RATE, config.HIGHPASS_HZ, config.LOWPASS_HZ, config.FILTER_ORDER, config.DEBUG)
     audio = Record(config.SAMPLE_RATE, config.DEBUG)
-    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.MAX_BUFFER_LENGTH, config.DEBUG)
+    whisper = STT(config.MODEL_NAME, config.MODEL_DEVICE, config.DEBUG)
     wakeWord = WakeWord(mqtt, config.MODEL_PATH, config.SAMPLE_RATE, config.WAKE_WORD_BLOCK_SIZE, config.WAKE_WORD_THRESHOLD, config.WAKE_WORD_COOLDOWN, config.DEBUG)
     sqlitedb = SQLiteDB(config.DB_PATH)
 
@@ -108,16 +120,14 @@ def main():
     model = whisper.load_model()
     
     # Create Dashboard first with MQTT transmitter reference
-    app = Dashboard(mqtt_transmitter=mqtt)
+    app = Dashboard(mqtt)
     
     # Initialize MQTT Receiver with dashboard reference
     reciever = MQTT_Receiver(config.SERVER, config.DEBUG, app)
-    
-    # Start MQTT Receiver thread
     reciever.start()
 
-    # Shared flag for thread control (mutable so thread can see changes)
-    running = [True]
+    # Event to signal thread to stop
+    stop_event = threading.Event()
 
     # Start robot control thread
     thread = threading.Thread(
@@ -127,24 +137,29 @@ def main():
         daemon=True
     )
     thread.start()
-    print("Controller thread started")
+    if config.DEBUG: print("Controller thread started")
 
     # Start GUI main loop
     try:
         app.mainloop()
+
     except KeyboardInterrupt:
         print("\nCtrl+C pressed in main thread")
+
     finally:
         print("Stopping controller...")
 
-        running[0] = False
-        mqtt.publish_command(0.0, 0.0)
-        thread.join(timeout=5.0)
+        # Wait for the robot control thread to finish
+        stop_event.set()
+        thread.join(timeout=1.0)
 
-        if thread.is_alive():
+        if thread.is_alive() and config.DEBUG:
             print("Warning: Thread did not stop gracefully")
 
+        # Stop the robot and close MQTT connection
+        mqtt.publish_command(0.0, 0.0)
         mqtt.close_connection()
+
         print("Script stopped successfully")
 
 

@@ -9,16 +9,14 @@ import time
 class STT:
     model_name = ""
     model_device = ""
-    max_buffer_length = None
     transcription = []
     DEBUG = False
     
 
     # Object init
-    def __init__(self, MODEL_NAME, MODEL_DEVICE, MAX_BUFFER_LENGTH, DEBUG) -> None:
+    def __init__(self, MODEL_NAME, MODEL_DEVICE, DEBUG) -> None:
         self.model_name = MODEL_NAME
         self.model_device = MODEL_DEVICE
-        self.max_buffer_length = MAX_BUFFER_LENGTH
         self.DEBUG = DEBUG
         if self.DEBUG: print(f"[STT class initialized]")
 
@@ -31,13 +29,14 @@ class STT:
         return model
 
 
-    def transcribe(self, model, audio) -> None:
+    def transcribe(self, model, audio, dashboard) -> None:
         try:
             audio = audio.astype(np.float32, copy=False)
             result = model.transcribe(audio, fp16=False, language='en', verbose=None, no_speech_threshold=0.5)
             segments = result.get("segments", [])
             for segment in segments:
                 text = segment.get("text", "").strip()
+                dashboard.set_transcription(text)
                 if self.DEBUG: print(f"[Transcribe] Raw text: {text}")
                 if text:
                     if self.DEBUG: print(text)
@@ -50,12 +49,9 @@ class STT:
     def add_transcription(self, word: str):
         w = self.clean_word(word)
         self.transcription.append(w)
-        if len(self.transcription) > self.max_buffer_length:
-            del self.transcription[:-self.max_buffer_length]
 
 
     def get_transcription(self) -> list:
-        # return a shallow copy to avoid race with strip
         return list(self.transcription)
 
 

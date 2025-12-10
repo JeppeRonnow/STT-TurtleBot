@@ -207,3 +207,8 @@ marimo/_lsp/
 __marimo__/
 
 *.wav
+#Ignore recordings
+recordings/
+
+# Ignore config files
+pc_client/config.yaml

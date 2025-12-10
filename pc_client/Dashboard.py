@@ -1,7 +1,8 @@
-import customtkinter as ctk
 import matplotlib.patches as patches
+import customtkinter as ctk
 import numpy as np
 import time
+
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
@@ -35,9 +36,9 @@ class Dashboard(ctk.CTk):
         self.command_history = []  # List of (timestamp, linear, angular) tuples
         self.max_history_entries = 10
 
-        # Configure grid layout (left panel wider than right)
-        self.grid_columnconfigure(0, weight=2)
-        self.grid_columnconfigure(1, weight=1)
+        # Configure grid layout (left panel and right panel equal size)
+        self.grid_columnconfigure(0, weight=1)  # Left panel weight
+        self.grid_columnconfigure(1, weight=1)  # Right panel weight
         self.grid_rowconfigure(0, weight=1)
 
         # Create left panel for robot position
@@ -50,6 +51,22 @@ class Dashboard(ctk.CTk):
         self.left_panel.grid_rowconfigure(2, weight=1)  # Position data
         self.left_panel.grid_columnconfigure(0, weight=1)
 
+        # Create right panel for plots
+        self.right_panel = ctk.CTkFrame(self, corner_radius=10)
+        self.right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
+
+        # Configure right panel grid (3 rows: STOP button, command history, audio plots)
+        self.right_panel.grid_rowconfigure(0, weight=0)  # STOP button (fixed height)
+        self.right_panel.grid_rowconfigure(1, weight=1)  # Command history
+        self.right_panel.grid_rowconfigure(2, weight=0)  # Transcription field
+        self.right_panel.grid_rowconfigure(3, weight=1)  # Audio plots
+        self.right_panel.grid_columnconfigure(0, weight=1)
+
+
+        # -------------------------------------------------- #
+        # ------------------- LEFT PANEL ------------------- #
+        # -------------------------------------------------- #
+
         # Left panel header
         self.position_label = ctk.CTkLabel(
             self.left_panel,
@@ -60,7 +77,7 @@ class Dashboard(ctk.CTk):
 
         # 2D Robot visualization frame
         self.robot_viz_frame = ctk.CTkFrame(self.left_panel, corner_radius=10)
-        self.robot_viz_frame.grid(row=1, column=0, padx=20, pady=(0, 10), sticky="nsew")
+        self.robot_viz_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
 
         # Create matplotlib figure for robot visualization
         self.robot_figure = Figure(figsize=(5, 5), dpi=100)
@@ -124,7 +141,7 @@ class Dashboard(ctk.CTk):
 
         # Robot position display frame
         self.position_frame = ctk.CTkFrame(self.left_panel, corner_radius=10)
-        self.position_frame.grid(row=2, column=0, padx=20, pady=(0, 20), sticky="nsew")
+        self.position_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
 
         # Position data labels
         self.x_label = ctk.CTkLabel(
@@ -163,18 +180,26 @@ class Dashboard(ctk.CTk):
         )
         self.status_label.pack(padx=20, pady=(10, 30))
 
-        # Create right panel for plots
-        self.right_panel = ctk.CTkFrame(self, corner_radius=10)
-        self.right_panel.grid(row=0, column=1, padx=10, pady=10, sticky="nsew")
 
-        # Configure right panel grid (2 rows for 2 plots)
-        self.right_panel.grid_rowconfigure(0, weight=1)
-        self.right_panel.grid_rowconfigure(1, weight=1)
-        self.right_panel.grid_columnconfigure(0, weight=1)
+        # --------------------------------------------------- #
+        # ------------------- RIGHT PANEL ------------------- #
+        # --------------------------------------------------- #
+        
+        # Create STOP button at top of right panel (full width)
+        self.stop_button = ctk.CTkButton(
+            self.right_panel,
+            text="EMERGENCY STOP",
+            font=ctk.CTkFont(size=20, weight="bold"),
+            fg_color="#F44336",
+            hover_color="#D32F2F",
+            height=60,
+            command=self.emergency_stop,
+        )
+        self.stop_button.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
 
-        # Create frame for command history (top)
+        # Create frame for command history (row 1)
         self.cmd_history_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
-        self.cmd_history_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+        self.cmd_history_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
 
         # Command History header
         self.cmd_history_label = ctk.CTkLabel(
@@ -205,6 +230,40 @@ class Dashboard(ctk.CTk):
             label.pack(fill="x", padx=5, pady=2)
             self.cmd_labels.append(label)
 
+        # Transcription display frame (row 2)
+        self.transcription_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
+        self.transcription_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")
+
+        # Transcription header
+        self.transcription_header = ctk.CTkLabel(
+            self.transcription_frame,
+            text="Last Transcription",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        self.transcription_header.pack(padx=10, pady=(10, 5))
+
+        # Transcription label
+        self.transcription_label = ctk.CTkLabel(
+            self.transcription_frame,
+            text="None",
+            font=ctk.CTkFont(size=14),
+            anchor="w",
+            justify="left",
+        )
+        self.transcription_label.pack(padx=10, pady=10)
+
+        # Create frame for audio plots (row 3)
+        self.audio_plot_frame = ctk.CTkFrame(self.right_panel, corner_radius=10)
+        self.audio_plot_frame.grid(row=3, column=0, padx=10, pady=10, sticky="nsew")
+
+        # Audio Plot header
+        self.audio_plot_label = ctk.CTkLabel(
+            self.audio_plot_frame,
+            text="Audio Recordings",
+            font=ctk.CTkFont(size=18, weight="bold"),
+        )
+        self.audio_plot_label.pack(padx=10, pady=10)
+
         # Create matplotlib figure with 1 subplot (just microphone)
         self.figure = Figure(figsize=(6, 4), dpi=100)
         self.figure.patch.set_facecolor("#2b2b2b")
@@ -214,7 +273,7 @@ class Dashboard(ctk.CTk):
         self.ax_mic.set_facecolor("#1e1e1e")
         self._style_axis(self.ax_mic)
         self.ax_mic.set_title(
-            "Audio Recordings (Raw vs Filtered)", color="white", fontsize=12
+            "Raw & Filtered Audio", color="white", fontsize=12
         )
         self.ax_mic.set_xlabel("Time (s)", color="white")
         self.ax_mic.set_ylabel("Amplitude", color="white")
@@ -222,7 +281,7 @@ class Dashboard(ctk.CTk):
         self.ax_mic.set_xlim(0, 3)  # Default 3 seconds
         self.ax_mic.grid(True, alpha=0.3, color="white")
 
-        # Initialize empty plot lines for 3 recordings
+        # Initialize empty plot lines for 2 recordings
         (self.raw_line,) = self.ax_mic.plot(
             [], [],
             color="#FF5722",
@@ -245,28 +304,20 @@ class Dashboard(ctk.CTk):
             labelcolor="white",
         )
 
-        # Adjust spacing between subplots
-        self.figure.tight_layout(pad=3.0)
+        # Adjust spacing
+        self.figure.tight_layout(pad=1.0)
 
-        # Create canvas and add to right panel (bottom half)
-        self.canvas = FigureCanvasTkAgg(self.figure, master=self.right_panel)
+        # Create canvas and add to audio plot frame
+        self.canvas = FigureCanvasTkAgg(self.figure, master=self.audio_plot_frame)
         self.canvas.draw()
-        self.canvas.get_tk_widget().grid(
-            row=1, column=0, padx=10, pady=10, sticky="nsew"
+        self.canvas.get_tk_widget().pack(
+            fill="both", expand=True, padx=10, pady=(5, 10)
         )
 
-        # Create stop button in absolute top right corner
-        self.stop_button = ctk.CTkButton(
-            self,
-            text="STOP",
-            font=ctk.CTkFont(size=18, weight="bold"),
-            fg_color="#F44336",
-            hover_color="#D32F2F",
-            width=120,
-            height=50,
-            command=self.emergency_stop,
-        )
-        self.stop_button.place(relx=1.0, rely=0.0, x=-15, y=15, anchor="ne")
+
+    # --------------------------------------------------- #
+    # -------------------- FUNCTIONS -------------------- #
+    # --------------------------------------------------- #
 
     def _style_axis(self, ax):
         """Apply consistent dark theme styling to an axis"""
@@ -278,6 +329,7 @@ class Dashboard(ctk.CTk):
         ax.xaxis.label.set_color("white")
         ax.yaxis.label.set_color("white")
         ax.title.set_color("white")
+
 
     def _create_robot_circle(self, x, y, theta_deg):
         """Create a circle with front indicator representing the robot"""
@@ -302,27 +354,22 @@ class Dashboard(ctk.CTk):
 
         return circle, (indicator_x, indicator_y)
 
-    def emergency_stop(self):
-        """Handle emergency stop button press"""
+
+    def emergency_stop(self) -> None:
         print("STOP button pressed")
 
         # Send stop command (0 velocity) to robot via MQTT
         if self.mqtt_transmitter:
             self.mqtt_transmitter.publish_command(0.0, 0.0)
+            self.status_label.configure(text="Status: Stopping", text_color="#F44336") # Red
         else:
             print("Warning: No MQTT transmitter available")
 
         # Also stop any ongoing animation
         self.update_robot_velocity(0.0, 0.0)
 
-    def update_robot_velocity(self, linear, angular):
-        """
-        Update robot velocity and start/stop movement animation
 
-        Args:
-            linear: Linear velocity in m/s
-            angular: Angular velocity in rad/s
-        """
+    def update_robot_velocity(self, linear, angular) -> None:
         self.current_linear = linear
         self.current_angular = angular
 
@@ -349,6 +396,7 @@ class Dashboard(ctk.CTk):
             # Stop animation
             self.after_cancel(self.animation_timer)
             self.animation_timer = None
+
 
     def _animate_movement(self):
         """Animate robot movement based on current velocities"""
@@ -393,17 +441,8 @@ class Dashboard(ctk.CTk):
         # Schedule next update (60 FPS)
         self.animation_timer = self.after(16, self._animate_movement)
 
-    def update_robot_position(self, x, y, theta, velocity=None, status=None):
-        """
-        Update robot position display (for manual position updates)
 
-        Args:
-            x: X position in meters
-            y: Y position in meters
-            theta: Orientation in degrees
-            velocity: Optional velocity in m/s
-            status: Optional status string
-        """
+    def update_robot_position(self, x, y, theta, velocity=None, status=None):
         self.robot_x = x
         self.robot_y = y
         self.robot_theta = theta
@@ -434,6 +473,7 @@ class Dashboard(ctk.CTk):
             self.trajectory_y = [0]
             self.trajectory_line.set_xdata(self.trajectory_x)
             self.trajectory_line.set_ydata(self.trajectory_y)
+
 
     def _update_robot_visualization(self, x, y, theta):
         """Update the 2D robot visualization"""
@@ -490,17 +530,8 @@ class Dashboard(ctk.CTk):
         # Redraw canvas
         self.robot_canvas.draw_idle()
 
+
     def get_instruction_name(self, linear, angular):
-        """
-        Get instruction name from velocity values
-        
-        Args:
-            linear: Linear velocity (m/s)
-            angular: Angular velocity (rad/s)
-            
-        Returns:
-            str: Instruction name (e.g., "stop", "forward", "backward", "turn left", "turn right", "return")
-        """
         # Special return code (must match logic.py)
         RETURN_CODE = 69.69
         
@@ -534,14 +565,8 @@ class Dashboard(ctk.CTk):
         
         return "unknown"
 
-    def update_command_history(self, linear, angular):
-        """
-        Update command history list with new velocity command
 
-        Args:
-            linear: Linear velocity (m/s)
-            angular: Angular velocity (rad/s)
-        """
+    def update_command_history(self, linear, angular):
         # Get current timestamp
         timestamp = time.strftime("%H:%M:%S")
         
@@ -563,16 +588,8 @@ class Dashboard(ctk.CTk):
             else:
                 label.configure(text="", text_color="white")
 
-    def update_audio_recordings(self, raw_audio, raw_time, filtered_audio, filtered_time):
-        """
-        Update audio plot with the 2 saved recordings
 
-        Args:
-            raw_audio: Raw audio array
-            raw_time: Time array for raw audio
-            filtered_audio: Filtered audio array
-            filtered_time: Time array for filtered audio
-        """
+    def update_audio_recordings(self, raw_audio, raw_time, filtered_audio, filtered_time):
         # Update both lines with linear amplitude
         self.raw_line.set_xdata(raw_time)
         self.raw_line.set_ydata(raw_audio)
@@ -585,6 +602,19 @@ class Dashboard(ctk.CTk):
         
         # Redraw canvas
         self.canvas.draw_idle()
+
+
+    def set_recording(self, is_recording) -> None:
+        """Update recording status on dashboard"""
+        if is_recording:
+            self.status_label.configure(text="Status: Recording", text_color="#FF9800")  # Orange
+        else:
+            self.status_label.configure(text="Status: Idle", text_color="#4CAF50")  # Green
+
+
+    def set_transcription(self, transcription: str) -> None:
+        """Update transcription display on dashboard"""
+        self.transcription_label.configure(text=transcription)
 
 
 if __name__ == "__main__":
