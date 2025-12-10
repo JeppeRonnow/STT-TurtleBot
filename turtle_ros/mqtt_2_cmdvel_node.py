@@ -99,11 +99,13 @@ class MqttToCmdVelNode(Node):
 
             # Check if comand is return
             if (payload['linear']['x'] == 69.69 and payload['angular']['z'] == 69.69):
+                self.get_logger().info("Return command received")
                 self.start_return()
                 return
             
             # Check if comand is reset
             if (payload['linear']['x'] == 99.99 and payload['angular']['z'] == 99.99):
+                self.get_logger().info("Reset command received")
                 self.Pos_tracker.reset_steps()
                 return
 
