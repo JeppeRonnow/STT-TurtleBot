@@ -20,7 +20,7 @@ class Move_Timer:
         if operation == "move": 
             return abs(distance) / self.MOVE_VELOCITY
         if operation == "turn":
-            return math.radians(abs(distance)) / self.TURN_VELOCITY
+            return math.radians(abs(distance) * 1.04) / self.TURN_VELOCITY
         raise ValueError("Invalid mode for delay calculation")        
 
 
