@@ -70,5 +70,10 @@ class Pos_tracker:
         mqtt_transmit("movement", {"linear": 0.0, "angular": 0.0})
         self.steps.clear()
 
-    def save_step(self, twist_msg):
+
+    def save_step(self, twist_msg) -> None:
         self.steps.append(twist_msg)
+
+
+    def reset_steps(self) -> None:
+        self.steps.clear()

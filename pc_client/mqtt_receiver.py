@@ -1,5 +1,4 @@
 import paho.mqtt.client as mqtt
-import threading
 import json
 
 class MQTT_Receiver:

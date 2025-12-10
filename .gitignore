@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+#Ignore recordings
+recordings/
+
+# Ignore config files
+pc_client/config.yaml
