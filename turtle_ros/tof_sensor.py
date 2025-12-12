@@ -46,9 +46,15 @@ class ToFSensor:
         self.direction = ""
 
         # Create ROI for ledge and distance.
-        self.roi_ledge = VL53L1X.VL53L1xUserRoi(6, 15, 9, 12)
         self.roi_distance = VL53L1X.VL53L1xUserRoi(6, 3, 9, 0)
+        self.roi_distance_wide = VL53L1X.VL53L1xUserRoi(4, 3, 11, 0)
+        self.roi_distance_wider = VL53L1X.VL53L1xUserRoi(2, 3, 13, 0)
+        self.roi_distance_widest = VL53L1X.VL53L1xUserRoi(0, 3, 15, 0)
 
+        self.roi_ledge = VL53L1X.VL53L1xUserRoi(6, 15, 9, 12)
+        self.roi_ledge_wide = VL53L1X.VL53L1xUserRoi(4, 15, 11, 12)
+        self.roi_ledge_wider = VL53L1X.VL53L1xUserRoi(2, 15, 13, 12)
+        self.roi_ledge_widest = VL53L1X.VL53L1xUserRoi(0, 15, 15, 12)
 
     # Start VL53L1X class
     def init_sensor(self):
@@ -80,7 +86,6 @@ class ToFSensor:
         # Disable both sensors
         GPIO.output(self._pins["front"], GPIO.LOW)
         GPIO.output(self._pins["rear"], GPIO.LOW)
-
 
     # Reads data from sensor
     def get_distance(self, which):
@@ -122,7 +127,6 @@ class ToFSensor:
                     self.logger.error(f"Failed to read distance on sensor '{which}'")
                     return -1, -1
 
-
     # Continuous sensor read in a blocking way
     def stream(self, which, interval=0.05, callback=None):
         # Clear flag
@@ -159,7 +163,6 @@ class ToFSensor:
         except KeyboardInterrupt:
             pass
 
-
     # Enable reading on desired sensor
     def enable(self, linear_vel):
         # Check which sensor to enable
@@ -189,7 +192,6 @@ class ToFSensor:
             GPIO.output(self._pins["rear"], GPIO.HIGH)
             time.sleep(0.05)
 
-
     # Close a given sensor
     def close_sensor(self, which):
         with self._lock:
@@ -212,8 +214,147 @@ class ToFSensor:
             # Clear sensor class
             self._tofs[which] = None
 
-
     # Close all sensors
     def close_all(self):
         self.close_sensor("front")
         self.close_sensor("rear")
+
+    # Experiment
+
+    def roi_experiment(self, which):
+        # Run 10 measurements per ROI configuration on the chosen sensor (`"front"` or `"rear"`)
+        # and print results to the terminal.
+
+        # Behaviour:
+        # - Ensures the requested sensor is powered using `enable()`.
+        # - Iterates through distance and ledge ROIs (narrow -> widest).
+        # - For each ROI performs 10 start/get/stop cycles and prints each reading.
+        # - Prints a simple summary (valid count and average of valid readings).
+        with self._lock:
+            tof = self._tofs.get(which)
+            if not tof:
+                self.logger.error(f"Failed to get sensor '{which}' for ROI experiment")
+                return
+
+            # Ensure correct sensor is enabled (reuse existing enable logic)
+            # front -> positive linear_vel, rear -> negative
+            self.enable(1.0 if which == "front" else -1.0)
+            time.sleep(self.settle)
+
+            # Ordered list of ROIs to test
+            roi_list = [
+                ("distance", self.roi_distance),
+                ("distance_wide", self.roi_distance_wide),
+                ("distance_wider", self.roi_distance_wider),
+                ("distance_widest", self.roi_distance_widest),
+                ("ledge", self.roi_ledge),
+                ("ledge_wide", self.roi_ledge_wide),
+                ("ledge_wider", self.roi_ledge_wider),
+                ("ledge_widest", self.roi_ledge_widest),
+            ]
+
+            print(f"Starting ROI experiment on '{which}' sensor")
+            try:
+                for roi_name, roi in roi_list:
+                    readings = []
+                    print(f"\nROI: {roi_name}")
+
+                    # Make sure no ranging is active, then set ROI once
+                    try:
+                        tof.stop_ranging()
+                    except Exception:
+                        # ignore stop errors
+                        pass
+                    time.sleep(0.1)
+
+                    try:
+                        tof.set_user_roi(roi)
+                    except Exception as e:
+                        self.logger.error(
+                            f"Failed to set ROI '{roi_name}' on '{which}': {e}"
+                        )
+                        print(f"  Failed to set ROI '{roi_name}'")
+                        continue
+
+                    time.sleep(0.03)
+
+                    for i in range(10):
+                        try:
+                            # Start ranging, wait briefly, read, then stop
+                            tof.start_ranging(2)
+                            time.sleep(0.06)
+                            val = int(tof.get_distance())
+                        except Exception as e:
+                            self.logger.error(
+                                f"Read failed for ROI '{roi_name}' ({which}) at iter {i}: {e}"
+                            )
+                            val = -1
+                        finally:
+                            # Ensure we stop ranging between measurements
+                            try:
+                                tof.stop_ranging()
+                            except Exception:
+                                pass
+
+                        readings.append(val)
+                        print(f"  #{i + 1:02d}: {val} mm")
+                        # small pause between measurements to give sensor time to settle
+                        time.sleep(0.1)
+
+                    # Summary of this ROI
+                    valid = [r for r in readings if r > 0]
+                    if valid:
+                        avg = sum(valid) / len(valid)
+                        print(f"  Summary: {len(valid)}/10 valid, avg = {avg:.1f} mm")
+                    else:
+                        print("  Summary: 0/10 valid readings")
+
+            finally:
+                # Make sure ranging is stopped when done
+                try:
+                    tof.stop_ranging()
+                except Exception:
+                    pass
+
+                print(f"\nCompleted ROI experiment on '{which}'")
+
+
+if __name__ == "__main__":
+    import logging
+    import sys
+
+    # Basic logger for CLI runs
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
+    )
+    logger = logging.getLogger("ToFSensor")
+
+    sensor = None
+    try:
+        # Instantiate sensor manager
+        sensor = ToFSensor(logger=logger)
+
+        # Run ROI experiment on front sensor
+        logger.info("Running ROI experiment on 'front' sensor")
+        sensor.roi_experiment("front")
+
+        # Optionally run ROI experiment on rear sensor
+        logger.info("Running ROI experiment on 'rear' sensor")
+        sensor.roi_experiment("rear")
+
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+    except Exception as e:
+        logger.exception("Unhandled exception during ROI experiments: %s", e)
+    finally:
+        # Ensure sensors are closed and GPIO is cleaned up
+        if sensor is not None:
+            try:
+                sensor.close_all()
+            except Exception:
+                logger.exception("Error while closing sensors")
+        try:
+            GPIO.cleanup()
+        except Exception:
+            logger.exception("Error during GPIO.cleanup()")
+        sys.exit(0)
