@@ -7,7 +7,7 @@ import paho.mqtt.client as mqtt
 
 class MQTT_Transmitter:
     # Define MQTT connection details
-    MQTT_SERVER = "10.232.34.254"  # Replace with MQTT server address
+    MQTT_SERVER = "10.234.214.254"  # Replace with MQTT server address
     MQTT_PORT = 1883  # Replace with MQTT port
     MQTT_TOPIC = "mqtt_vel"  # Replace with MQTT topic
 

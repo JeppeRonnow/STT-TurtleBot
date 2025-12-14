@@ -46,8 +46,8 @@ class ToFSensor:
         self.direction = ""
 
         # Create ROI for ledge and distance.
-        self.roi_ledge = VL53L1X.VL53L1xUserRoi(6, 15, 9, 12)
-        self.roi_distance = VL53L1X.VL53L1xUserRoi(6, 3, 9, 0)
+        self.roi_ledge = VL53L1X.VL53L1xUserRoi(0, 15, 15, 12)
+        self.roi_distance = VL53L1X.VL53L1xUserRoi(0, 3, 15, 0)
 
 
     # Start VL53L1X class
@@ -147,7 +147,7 @@ class ToFSensor:
                     self.logger.info(f"{which}: {ledge_distance}mm, {distance}mm")
 
                 # Check if ledge disatnce is to high
-                if ledge_distance is not None and ledge_distance > 950:
+                if ledge_distance is not None and ledge_distance > 500:
                     self.logger.info("Ledge detected!")
                     return True
 
